@@ -1,0 +1,3 @@
+[submodule "app/bejzak_engine"]
+	path = app/bejzak_engine
+	url = https://github.com/Blaczumba/bejzak_engine.git
