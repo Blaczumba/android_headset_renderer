@@ -8,7 +8,7 @@
 	<application
 		android:allowBackup="false"
 		android:hasCode="false"
-		android:label="Quest XR"
+		android:label="Android App - BejzakEngine"
 		android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
 		<activity
 			android:name="android.app.NativeActivity"
