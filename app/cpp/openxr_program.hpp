@@ -56,13 +56,14 @@ class OpenXrProgram {
   bool RenderLayer(XrTime predicted_display_time,
                    std::vector<XrCompositionLayerProjectionView> &projection_layer_views,
                    XrCompositionLayerProjection &layer);
- private:
-  std::shared_ptr<Platform> platform_;
-  std::shared_ptr<GraphicsPlugin> graphics_plugin_;
-
+ public:
   XrInstance instance_ = XR_NULL_HANDLE;
   XrSystemId system_id_ = XR_NULL_SYSTEM_ID;
   XrSession session_ = XR_NULL_HANDLE;
+
+ private:
+  std::shared_ptr<Platform> platform_;
+  std::shared_ptr<GraphicsPlugin> graphics_plugin_;
 
   InputState input_{};
 

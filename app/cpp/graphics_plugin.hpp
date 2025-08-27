@@ -10,8 +10,11 @@
 class GraphicsPlugin {
  public:
   virtual std::vector<std::string> GetOpenXrInstanceExtensions() const = 0;
+
   virtual void InitializeDevice(XrInstance instance, XrSystemId system_id) = 0;
+
   virtual const XrBaseInStructure *GetGraphicsBinding() const = 0;
+
   virtual int64_t SelectSwapchainFormat(const std::vector<int64_t> &runtime_formats) = 0;
 
   virtual XrSwapchainImageBaseHeader *AllocateSwapchainImageStructs(uint32_t capacity,
