@@ -45,11 +45,13 @@ android {
     sourceSets {
         getByName("main") {
             manifest.srcFile("AndroidManifest.xml")
+            assets.srcDirs("assets")
         }
         getByName("debug") {
             jniLibs {
                 srcDir("libs/debug")
             }
+            assets.srcDirs("assets")
         }
         getByName("release") {
             jniLibs.srcDir("libs/release")

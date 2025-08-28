@@ -1,3 +1,5 @@
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include <android_native_app_glue.h>
 
 #include "platform_data.hpp"
@@ -11,6 +13,7 @@
 #include <unistd.h>
 
 #include "openxr_wrapper/graphics_plugin/graphics_plugin_vulkan.h"
+#include "application.h"
 #include "openxr_wrapper/instance/instance.h"
 #include "openxr_wrapper/system/system.h"
 #include "openxr_wrapper/platform/android_platform.h"
@@ -72,10 +75,10 @@ class VrApp {
  public:
   VrApp() = default;
 
-  Status init(void* applicationVm, void* applicationActivity) {
+  Status init(void* applicationVm, void* applicationActivity, AAssetManager* assetManager) {
     xrw::AndroidData data = {applicationVm, applicationActivity};
     _platform = std::make_unique<xrw::AndroidPlatform>(data);
-    _graphicsPlugin = std::make_unique<xrw::GraphicsPluginVulkan>(debugCallback);
+    _graphicsPlugin = std::make_unique<xrw::VulkanApplication>(debugCallback, assetManager);
 
     ASSIGN_OR_RETURN(_instance, xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
     ASSIGN_OR_RETURN(_system, xrw::System::create(*_instance));
@@ -393,7 +396,7 @@ void android_main(struct android_app *app) {
     //program->CreateInstance();
     //program->InitializeSystem();
     VrApp application;
-    auto stat = application.init(app->activity->vm, app->activity->clazz);
+    auto stat = application.init(app->activity->vm, app->activity->clazz, app->activity->assetManager);
 
     // program->InitializeSession();
     // program->CreateSwapchains();
