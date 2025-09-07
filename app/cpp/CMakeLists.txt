@@ -16,7 +16,7 @@ add_library(quest-xr SHARED
         )
 
 set(SHADER_COMPILE_SCRIPT
-        "${PROJECT_SOURCE_DIR}/bejzak_engine/shaders/compile_shaders.sh")
+        "${PROJECT_SOURCE_DIR}/cpp/compile_shaders.sh")
 
 file(CHMOD ${SHADER_COMPILE_SCRIPT} PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ)
 
@@ -27,7 +27,6 @@ add_custom_target(
 
 add_dependencies(quest-xr CompileShaders)
 
-add_compile_definitions(SHADERS_PATH="${PROJECT_SOURCE_DIR}/bejzak_engine/shaders/")
 add_compile_definitions(TEXTURES_PATH="textures/")
 add_compile_definitions(MODELS_PATH="models/")
 

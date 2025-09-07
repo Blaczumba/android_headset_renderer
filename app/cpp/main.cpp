@@ -78,7 +78,7 @@ class VrApp {
   Status init(void* applicationVm, void* applicationActivity, AAssetManager* assetManager) {
     xrw::AndroidData data = {applicationVm, applicationActivity};
     _platform = std::make_unique<xrw::AndroidPlatform>(data);
-    _graphicsPlugin = std::make_unique<xrw::VulkanApplication>(debugCallback, assetManager);
+    _graphicsPlugin = std::make_unique<xrw::VulkanApplication>(debugCallback, assetManager, std::make_unique<AndroidFileLoader>(assetManager));
 
     ASSIGN_OR_RETURN(_instance, xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
     ASSIGN_OR_RETURN(_system, xrw::System::create(*_instance));
@@ -88,6 +88,7 @@ class VrApp {
         .withArraySize(2)
         .withViewConfigType(kConfigType)
         .build(*_session, *_graphicsPlugin));
+    RETURN_IF_ERROR(_graphicsPlugin->createResources());
     ASSIGN_OR_RETURN(_space,  xrw::Space::create(_session->getXrSession(),
                                                  XR_REFERENCE_SPACE_TYPE_LOCAL));
     return StatusOk();
