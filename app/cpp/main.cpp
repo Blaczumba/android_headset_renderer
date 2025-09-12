@@ -332,6 +332,7 @@ class VrApp {
 //                                   swapchain_image,
 //                                   swapchain_image_index,
 //                                   cubes);
+      RETURN_IF_ERROR(_graphicsPlugin->draw(view_swapchain.getSwapchain(), swapchain_image_index));
 
       XrSwapchainImageReleaseInfo release_info{};
       release_info.type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO;
