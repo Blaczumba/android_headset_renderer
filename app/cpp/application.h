@@ -256,7 +256,42 @@ private:
     return StatusOk();
   }
 
-  Status recordCommandBuffer(const Framebuffer& framebuffer, const PrimaryCommandBuffer& primaryCommandBuffer, const SecondaryCommandBuffer& secCommandBuffer) {
+  glm::mat4 createProjectionMatrix(const XrFovf& fov, float near, float far) {
+    float left   = near * tanf(fov.angleLeft);
+    float right  = near * tanf(fov.angleRight);
+    float bottom = near * tanf(fov.angleDown);
+    float top    = near * tanf(fov.angleUp);
+
+    glm::mat4 proj = glm::frustum(left, right, bottom, top, near, far);
+
+    // Flip Y for Vulkan NDC
+    proj[1][1] = -proj[1][1];
+    return proj;
+  }
+
+  glm::mat4 toGlm(const XrPosef& pose) {
+    glm::quat orientation = glm::quat(
+        pose.orientation.w,
+        pose.orientation.x,
+        pose.orientation.y,
+        pose.orientation.z);
+
+    glm::vec3 position = glm::vec3(
+        pose.position.x,
+        pose.position.y,
+        pose.position.z);
+
+    glm::mat4 rotation = glm::mat4_cast(orientation);
+    glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
+
+    return translation * rotation;
+  }
+
+  glm::mat4 getViewMatrix(const XrPosef& pose) {
+    return glm::inverse(toGlm(pose));
+  }
+
+  Status recordCommandBuffer(const XrCompositionLayerProjectionView& projectionLayerView, const Framebuffer& framebuffer, const PrimaryCommandBuffer& primaryCommandBuffer, const SecondaryCommandBuffer& secCommandBuffer) {
     primaryCommandBuffer.begin();
     primaryCommandBuffer.beginRenderPass(framebuffer);
 
@@ -303,8 +338,8 @@ private:
       vkCmdBindIndexBuffer(commandBuffer, _indexBufferCube.getVkBuffer(), 0,
                            _indexBufferCubeType);
 
-      const PushConstantsSkybox pc = {.proj = glm::mat4(1.0f),
-          .view = glm::mat4(1.0f),
+      const PushConstantsSkybox pc = {.proj = createProjectionMatrix(projectionLayerView.fov, 0.01f, 50.0f),
+          .view = getViewMatrix(projectionLayerView.pose),
           .skyboxHandle =
           static_cast<uint32_t>(_skyboxHandle)};
       vkCmdPushConstants(
@@ -341,8 +376,8 @@ private:
     return StatusOk();
   }
 
-  Status draw(XrSwapchain swapchain, uint32_t swapchain_image_index) override {
-    const SwapchainContext& context = _swapchainImageContexts[swapchain];
+  Status draw(const XrCompositionLayerProjectionView& projectionLayerView, uint32_t swapchain_image_index) override {
+    const SwapchainContext& context = _swapchainImageContexts[projectionLayerView.subImage.swapchain];
     vkWaitForFences(_logicalDevice.getVkDevice(), 1,
                     &context.fences[_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -356,7 +391,7 @@ private:
     for (int i = 0; i < MAX_THREADS_IN_POOL; i++)
       context.commandBuffers[i][_currentFrame].resetCommandBuffer();
 
-    recordCommandBuffer(context.framebuffers[swapchain_image_index],
+    recordCommandBuffer(projectionLayerView, context.framebuffers[swapchain_image_index],
                         context.primaryCommandBuffer[_currentFrame],
                         context.commandBuffers[0][_currentFrame]);
 
