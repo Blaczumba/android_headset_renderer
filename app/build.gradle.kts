@@ -5,13 +5,13 @@ android {
     compileSdk = 32
     // ndkVersion = "26.3.11579264"
     ndkVersion = "29.0.13599879"
-    namespace = "app.artyomd.questxr"
+    namespace = "app.bejzak.bejzak_engine"
     defaultConfig {
         minSdk = 32
         targetSdk = 32
         versionCode = 1
         versionName = "1.0"
-        applicationId = "app.artyomd.questxr"
+        applicationId = "app.bejzak.bejzak_engine"
         externalNativeBuild {
             cmake {
                 arguments.add("-DANDROID_STL=c++_shared")
