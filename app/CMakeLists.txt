@@ -10,41 +10,13 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 
 add_subdirectory(meta_quest_openxr_loader)
 
-FetchContent_Declare(magic_enum
-        GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-        GIT_TAG v0.9.5
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-)
-FetchContent_MakeAvailable(magic_enum)
-
-
 FetchContent_Declare(spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
         GIT_TAG v1.13.0
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE
-        )
+)
 FetchContent_MakeAvailable(spdlog)
-
-FetchContent_Declare(glm
-        GIT_REPOSITORY https://github.com/g-truc/glm.git
-        GIT_TAG 1.0.1
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-        )
-FetchContent_MakeAvailable(glm)
-
-FetchContent_Declare(SPIRV-Reflect
-        GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Reflect.git
-        GIT_TAG vulkan-sdk-1.3.280.0
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE
-        )
-set(SPIRV_REFLECT_EXAMPLES OFF)
-set(SPIRV_REFLECT_EXECUTABLE OFF)
-set(SPIRV_REFLECT_STATIC_LIB ON)
-FetchContent_MakeAvailable(SPIRV-Reflect)
 
 FetchContent_Declare(OpenXR-SDK
         GIT_REPOSITORY https://github.com/KhronosGroup/OpenXR-SDK.git
@@ -55,5 +27,5 @@ FetchContent_Declare(OpenXR-SDK
 )
 FetchContent_MakeAvailable(OpenXR-SDK)
 
-add_subdirectory(cpp)
 add_subdirectory(bejzak_engine)
+add_subdirectory(cpp)

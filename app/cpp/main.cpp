@@ -2,11 +2,6 @@
 #include <android/asset_manager_jni.h>
 #include <android_native_app_glue.h>
 
-#include "platform_data.hpp"
-#include "platform.hpp"
-
-#include "openxr_program.hpp"
-
 #include <spdlog/sinks/android_sink.h>
 #include <spdlog/spdlog.h>
 
@@ -345,16 +340,18 @@ class VrApp {
     return StatusOk();
   }
 
+  static constexpr size_t INPUT_COUNT = 2;
+
   struct InputState {
     XrActionSet action_set = XR_NULL_HANDLE;
     XrAction grab_action = XR_NULL_HANDLE;
     XrAction pose_action = XR_NULL_HANDLE;
     XrAction vibrate_action = XR_NULL_HANDLE;
     XrAction quit_action = XR_NULL_HANDLE;
-    std::array<XrPath, side::COUNT> hand_subaction_path{};
-    std::array<XrSpace, side::COUNT> hand_space{};
-    std::array<float, side::COUNT> hand_scale = {{1.0f, 1.0f}};
-    std::array<XrBool32, side::COUNT> hand_active{};
+    std::array<XrPath, INPUT_COUNT> hand_subaction_path{};
+    std::array<XrSpace, INPUT_COUNT> hand_space{};
+    std::array<float, INPUT_COUNT> hand_scale = {{1.0f, 1.0f}};
+    std::array<XrBool32, INPUT_COUNT> hand_active{};
   };
 
  private:
@@ -372,6 +369,11 @@ class VrApp {
   bool _sessionRunning = false;
   static constexpr inline XrViewConfigurationType kConfigType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
   InputState _input;
+};
+
+struct PlatformData {
+  void *application_vm;
+  void *application_activity;
 };
 
 void android_main(struct android_app *app) {
