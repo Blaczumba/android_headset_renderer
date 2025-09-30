@@ -3,20 +3,21 @@
 #include "graphics_plugin_vulkan.h"
 
 #include <android/asset_manager.h>
+#include <glm/glm.hpp>
 #include <memory>
 
 #include "common/file/android_file_loader.h"
 #include "common/model_loader/model_loader.h"
 #include "common/model_loader/obj_loader/obj_loader.h"
+#include "openxr_wrapper/util/check.h"
 #include "vulkan_wrapper/descriptor_set/bindless_descriptor_set_writer.h"
 #include "vulkan_wrapper/descriptor_set/descriptor_pool.h"
 #include "vulkan_wrapper/memory_objects/texture.h"
+#include "vulkan_wrapper/pipeline/graphics_pipeline.h"
 #include "vulkan_wrapper/pipeline/shader_program.h"
 #include "vulkan_wrapper/render_pass/render_pass.h"
 #include "vulkan_wrapper/resource_manager/asset_manager.h"
 #include "vulkan_wrapper/util/check.h"
-#include "vulkan_wrapper/pipeline/graphics_pipeline.h"
-#include "openxr_wrapper/util/check.h"
 
 namespace {
 
@@ -172,7 +173,8 @@ private:
     if (_swapchainImageContexts.empty()) {
       return Error(EngineError::EMPTY_COLLECTION);
     }
-    const VkFormat swapchainImageFormat = _swapchainImageContexts.cbegin()->second.format;
+    const VkFormat swapchainImageFormat =
+        _swapchainImageContexts.cbegin()->second.format;
     AttachmentLayout attachmentsLayout(msaaSamples);
     attachmentsLayout
         .addColorResolvePresentAttachment(swapchainImageFormat,
@@ -199,14 +201,14 @@ private:
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
       const VkCommandBuffer commandBuffer = handle.getCommandBuffer();
-      for (auto& [swapchain, context] : _swapchainImageContexts) {
+      for (auto &[swapchain, context] : _swapchainImageContexts) {
         context.framebuffers = lib::Buffer<Framebuffer>(context.views.size());
         for (uint8_t i = 0; i < context.views.size(); ++i) {
           ASSIGN_OR_RETURN(Framebuffer framebuffer,
                            Framebuffer::createFromSwapchain(
-                               commandBuffer, _renderpass, {context.width, context.height},
-                               context.views[i],
-                               context.attachments));
+                               commandBuffer, _renderpass,
+                               {context.width, context.height},
+                               context.views[i], context.attachments));
           context.framebuffers[i] = std::move(framebuffer);
         }
       }
@@ -221,13 +223,15 @@ private:
   }
 
   Status createCommandBuffers() {
-    for (auto& [swapchain, context] : _swapchainImageContexts) {
+    for (auto &[swapchain, context] : _swapchainImageContexts) {
       for (int i = 0; i < MAX_THREADS_IN_POOL + 1; i++) {
-        ASSIGN_OR_RETURN(context.commandPools[i], CommandPool::create(_logicalDevice));
+        ASSIGN_OR_RETURN(context.commandPools[i],
+                         CommandPool::create(_logicalDevice));
       }
       ASSIGN_OR_RETURN(
           context.primaryCommandBuffer,
-          context.commandPools[MAX_THREADS_IN_POOL]->createPrimaryCommandBuffers<MAX_FRAMES_IN_FLIGHT>());
+          context.commandPools[MAX_THREADS_IN_POOL]
+              ->createPrimaryCommandBuffers<MAX_FRAMES_IN_FLIGHT>());
       for (int i = 0; i < MAX_THREADS_IN_POOL; i++) {
         ASSIGN_OR_RETURN(
             context.commandBuffers[i],
@@ -241,26 +245,27 @@ private:
   Status createSyncObjects() {
     static constexpr VkSemaphoreCreateInfo semaphoreInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
-    static constexpr VkFenceCreateInfo fenceInfo = {.sType =
-    VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    static constexpr VkFenceCreateInfo fenceInfo = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 
-    for (auto& [swapchain, context] : _swapchainImageContexts) {
+    for (auto &[swapchain, context] : _swapchainImageContexts) {
       for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        CHECK_VKCMD(vkCreateSemaphore(_logicalDevice.getVkDevice(), &semaphoreInfo,
-                                      nullptr, &context.renderFinishedSemaphores[i]));
-        CHECK_VKCMD(vkCreateFence(_logicalDevice.getVkDevice(), &fenceInfo, nullptr,
-                                  &context.fences[i]));
+        CHECK_VKCMD(vkCreateSemaphore(_logicalDevice.getVkDevice(),
+                                      &semaphoreInfo, nullptr,
+                                      &context.renderFinishedSemaphores[i]));
+        CHECK_VKCMD(vkCreateFence(_logicalDevice.getVkDevice(), &fenceInfo,
+                                  nullptr, &context.fences[i]));
       }
     }
     return StatusOk();
   }
 
-  glm::mat4 createProjectionMatrix(const XrFovf& fov, float near, float far) {
-    float left   = near * tanf(fov.angleLeft);
-    float right  = near * tanf(fov.angleRight);
+  glm::mat4 createProjectionMatrix(const XrFovf &fov, float near, float far) {
+    float left = near * tanf(fov.angleLeft);
+    float right = near * tanf(fov.angleRight);
     float bottom = near * tanf(fov.angleDown);
-    float top    = near * tanf(fov.angleUp);
+    float top = near * tanf(fov.angleUp);
 
     glm::mat4 proj = glm::frustum(left, right, bottom, top, near, far);
 
@@ -269,17 +274,12 @@ private:
     return proj;
   }
 
-  glm::mat4 toGlm(const XrPosef& pose) {
-    glm::quat orientation = glm::quat(
-        pose.orientation.w,
-        pose.orientation.x,
-        pose.orientation.y,
-        pose.orientation.z);
+  glm::mat4 toGlm(const XrPosef &pose) {
+    glm::quat orientation = glm::quat(pose.orientation.w, pose.orientation.x,
+                                      pose.orientation.y, pose.orientation.z);
 
-    glm::vec3 position = glm::vec3(
-        pose.position.x,
-        pose.position.y,
-        pose.position.z);
+    glm::vec3 position =
+        glm::vec3(pose.position.x, pose.position.y, pose.position.z);
 
     glm::mat4 rotation = glm::mat4_cast(orientation);
     glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
@@ -287,11 +287,15 @@ private:
     return translation * rotation;
   }
 
-  glm::mat4 getViewMatrix(const XrPosef& pose) {
+  glm::mat4 getViewMatrix(const XrPosef &pose) {
     return glm::inverse(toGlm(pose));
   }
 
-  Status recordCommandBuffer(const XrCompositionLayerProjectionView& projectionLayerView, const Framebuffer& framebuffer, const PrimaryCommandBuffer& primaryCommandBuffer, const SecondaryCommandBuffer& secCommandBuffer) {
+  Status recordCommandBuffer(
+      const XrCompositionLayerProjectionView &projectionLayerView,
+      const Framebuffer &framebuffer,
+      const PrimaryCommandBuffer &primaryCommandBuffer,
+      const SecondaryCommandBuffer &secCommandBuffer) {
     primaryCommandBuffer.begin();
     primaryCommandBuffer.beginRenderPass(framebuffer);
 
@@ -303,7 +307,7 @@ private:
     if (viewportScissorInheritance) [[likely]] {
       scissorViewportInheritance = VkCommandBufferInheritanceViewportScissorInfoNV{
           .sType =
-          VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV,
+              VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_VIEWPORT_SCISSOR_INFO_NV,
           .viewportScissor2D = VK_TRUE,
           .viewportDepthCount = 1,
           .pViewportDepths = &framebuffer.getViewport(),
@@ -317,11 +321,10 @@ private:
           secCommandBuffer.getVkCommandBuffer();
 
       if (viewportScissorInheritance) [[likely]] {
-        CHECK_VKCMD(secCommandBuffer.begin(
-            framebuffer, &scissorViewportInheritance));
-      } else {
         CHECK_VKCMD(
-            secCommandBuffer.begin(framebuffer, nullptr));
+            secCommandBuffer.begin(framebuffer, &scissorViewportInheritance));
+      } else {
+        CHECK_VKCMD(secCommandBuffer.begin(framebuffer, nullptr));
         vkCmdSetViewport(commandBuffer, 0, 1, &framebuffer.getViewport());
         vkCmdSetScissor(commandBuffer, 0, 1, &framebuffer.getScissor());
       }
@@ -338,10 +341,10 @@ private:
       vkCmdBindIndexBuffer(commandBuffer, _indexBufferCube.getVkBuffer(), 0,
                            _indexBufferCubeType);
 
-      const PushConstantsSkybox pc = {.proj = createProjectionMatrix(projectionLayerView.fov, 0.01f, 50.0f),
+      const PushConstantsSkybox pc = {
+          .proj = createProjectionMatrix(projectionLayerView.fov, 0.01f, 50.0f),
           .view = getViewMatrix(projectionLayerView.pose),
-          .skyboxHandle =
-          static_cast<uint32_t>(_skyboxHandle)};
+          .skyboxHandle = static_cast<uint32_t>(_skyboxHandle)};
       vkCmdPushConstants(
           commandBuffer, _graphicsPipelineSkybox->getVkPipelineLayout(),
           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
@@ -376,8 +379,10 @@ private:
     return StatusOk();
   }
 
-  Status draw(const XrCompositionLayerProjectionView& projectionLayerView, uint32_t swapchain_image_index) override {
-    const SwapchainContext& context = _swapchainImageContexts[projectionLayerView.subImage.swapchain];
+  Status draw(const XrCompositionLayerProjectionView &projectionLayerView,
+              uint32_t swapchain_image_index) override {
+    const SwapchainContext &context =
+        _swapchainImageContexts[projectionLayerView.subImage.swapchain];
     vkWaitForFences(_logicalDevice.getVkDevice(), 1,
                     &context.fences[_currentFrame], VK_TRUE, UINT64_MAX);
 
@@ -391,7 +396,8 @@ private:
     for (int i = 0; i < MAX_THREADS_IN_POOL; i++)
       context.commandBuffers[i][_currentFrame].resetCommandBuffer();
 
-    recordCommandBuffer(projectionLayerView, context.framebuffers[swapchain_image_index],
+    recordCommandBuffer(projectionLayerView,
+                        context.framebuffers[swapchain_image_index],
                         context.primaryCommandBuffer[_currentFrame],
                         context.commandBuffers[0][_currentFrame]);
 
@@ -407,8 +413,8 @@ private:
         static_cast<uint32_t>(std::size(submitCommands));
     submitInfo.pCommandBuffers = submitCommands;
 
-    CHECK_VKCMD(vkQueueSubmit(_logicalDevice.getGraphicsVkQueue(), 1, &submitInfo,
-                              context.fences[_currentFrame]));
+    CHECK_VKCMD(vkQueueSubmit(_logicalDevice.getGraphicsVkQueue(), 1,
+                              &submitInfo, context.fences[_currentFrame]));
 
     if (++_currentFrame == MAX_FRAMES_IN_FLIGHT) {
       _currentFrame = 0;
