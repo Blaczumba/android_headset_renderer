@@ -8,6 +8,7 @@
 
 #include "common/file/android_file_loader.h"
 #include "common/model_loader/model_loader.h"
+#include "common/model_loader/tiny_gltf_loader/tiny_gltf_loader.h"
 #include "common/model_loader/obj_loader/obj_loader.h"
 #include "openxr_wrapper/util/check.h"
 #include "vulkan_wrapper/descriptor_set/bindless_descriptor_set_writer.h"
@@ -18,6 +19,11 @@
 #include "vulkan_wrapper/render_pass/render_pass.h"
 #include "vulkan_wrapper/resource_manager/asset_manager.h"
 #include "vulkan_wrapper/util/check.h"
+#include "common/scene/octree.h"
+#include "common/entity_component_system/registry/registry.h"
+#include "common/entity_component_system/component/material.h"
+#include "common/entity_component_system/component/mesh.h"
+#include "common/entity_component_system/component/transform.h"
 
 namespace {
 
@@ -59,6 +65,40 @@ ErrorOr<Texture> createCubemap(const LogicalDevice &logicalDevice,
                   createBufferImageCopyRegions(imageData.copyRegions));
 }
 
+ErrorOr<Texture> createShadowmap(const LogicalDevice &logicalDevice,
+                                 VkCommandBuffer commandBuffer, uint32_t width,
+                                 uint32_t height, VkFormat format) {
+  return TextureBuilder()
+      .withAspect(VK_IMAGE_ASPECT_DEPTH_BIT)
+      .withExtent(width, height)
+      .withFormat(format)
+      .withUsage(VK_IMAGE_USAGE_SAMPLED_BIT |
+          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+      .withAddressModes(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
+      .withCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL)
+      .withBorderColor(VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE)
+      .buildImageSampler(logicalDevice, commandBuffer);
+}
+
+ErrorOr<Texture> createTexture2D(const LogicalDevice &logicalDevice,
+                                 VkCommandBuffer commandBuffer,
+                                 const AssetManager::ImageData &imageData,
+                                 VkFormat format, float samplerAnisotropy) {
+  return TextureBuilder()
+      .withAspect(VK_IMAGE_ASPECT_COLOR_BIT)
+      .withExtent(imageData.width, imageData.height)
+      .withFormat(format)
+      .withMipLevels(imageData.mipLevels)
+      .withUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+      .withMaxAnisotropy(samplerAnisotropy)
+      .withMaxLod(static_cast<float>(imageData.mipLevels))
+      .buildMipmapImage(logicalDevice, commandBuffer, imageData.stagingBuffer.getVkBuffer(),
+                        createBufferImageCopyRegions(imageData.copyRegions));
+}
+
 } // namespace
 
 namespace xrw {
@@ -68,8 +108,10 @@ public:
   VulkanApplication(PFN_vkDebugUtilsMessengerCallbackEXT debugCallback,
                     AAssetManager *assetManager,
                     const std::shared_ptr<FileLoader> &fileLoader)
-      : GraphicsPluginVulkan(debugCallback), _assetManager(fileLoader),
-        _programManager(fileLoader), _fileLoader(fileLoader) {}
+      : GraphicsPluginVulkan(debugCallback), _assetManager(_logicalDevice, fileLoader),
+        _programManager(fileLoader), _fileLoader(fileLoader) {
+    // setAssetmanager(assetManager);
+  }
 
   Status createResources() override {
     RETURN_IF_ERROR(loadCubemap());
@@ -77,6 +119,8 @@ public:
     RETURN_IF_ERROR(createPresentResources());
     RETURN_IF_ERROR(createCommandBuffers());
     RETURN_IF_ERROR(createSyncObjects());
+    // RETURN_IF_ERROR(loadObjects());
+    // RETURN_IF_ERROR(createOctreeScene());
     return StatusOk();
   }
 
@@ -92,6 +136,27 @@ private:
   ShaderProgram _skyboxShaderProgram;
   TextureHandle _skyboxHandle;
 
+  // gltf objects
+  uint32_t index = 0;
+  std::unordered_map<std::string, std::pair<TextureHandle, Texture>> _textures;
+  std::unordered_map<std::string, Buffer> _vertexBufferMap;
+  std::unordered_map<std::string, Buffer> _indexBufferMap;
+  std::unordered_map<Entity, uint32_t> _entityToIndex;
+  std::vector<Object> _objects;
+  std::unique_ptr<Octree> _octree;
+  Registry _registry;
+  Renderpass _renderPass;
+  std::vector<Framebuffer> _framebuffers;
+  std::vector<Texture> _attachments;
+
+  // shadow map
+  Renderpass _shadowRenderPass;
+  Framebuffer _shadowFramebuffer;
+  std::unique_ptr<GraphicsPipeline>
+      _shadowPipeline; // Does not have to be unique_ptr
+  Texture _shadowMap;
+  TextureHandle _shadowHandle;
+
   std::shared_ptr<DescriptorPool> _descriptorPool;
   DescriptorSet _bindlessDescriptorSet;
   std::unique_ptr<BindlessDescriptorSetWriter>
@@ -104,17 +169,13 @@ private:
   uint8_t _currentFrame = 0;
 
   Status loadCubemap() {
-    _assetManager.loadImageAsync(_logicalDevice,
+    _assetManager.loadImageAsync(
                                  TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
 
     ASSIGN_OR_RETURN(
-        std::istringstream data,
-        _fileLoader->loadFileToStringStream(MODELS_PATH "cube.obj"));
-    ASSIGN_OR_RETURN(VertexData vertexDataCube, loadObj(data));
-    _assetManager.loadVertexDataAsync(
-        _logicalDevice, "cube.obj", vertexDataCube.indices,
-        static_cast<uint8_t>(vertexDataCube.indexType),
-        std::span<const glm::vec3>(vertexDataCube.positions));
+        std::string data,
+        _fileLoader->loadFileToString(MODELS_PATH "cube.obj"));
+    ASSIGN_OR_RETURN(VertexData vertexDataCube, loadObj(_assetManager, "cube.obj", data));
 
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
@@ -150,6 +211,24 @@ private:
     return StatusOk();
   }
 
+  Status createOctreeScene() {
+    AABB sceneAABB =
+        _registry.getComponent<MeshComponent>(_objects[0].getEntity()).aabb;
+
+    for (int i = 1; i < _objects.size(); ++i) {
+      sceneAABB.extend(
+          _registry.getComponent<MeshComponent>(_objects[i].getEntity()).aabb);
+    }
+    _octree = std::make_unique<Octree>(sceneAABB);
+
+    for (const Object& object : _objects)
+      _octree->addObject(
+          &object,
+          _registry.getComponent<MeshComponent>(object.getEntity()).aabb);
+
+    return StatusOk();
+  }
+
   Status createDescriptorSets() {
     ASSIGN_OR_RETURN(_skyboxShaderProgram,
                      _programManager.createSkyboxProgram(_logicalDevice));
@@ -161,6 +240,16 @@ private:
                      _descriptorPool->createDesriptorSet(
                          _programManager.getVkDescriptorSetLayout(
                              DescriptorSetType::BINDLESS)));
+
+    {
+      // TODO: Should not be in this function.
+      SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
+      const VkCommandBuffer commandBuffer = handle.getCommandBuffer();
+      ASSIGN_OR_RETURN(_shadowMap,
+                       createShadowmap(_logicalDevice, commandBuffer, 1024 * 2,
+                                       1024 * 2, VK_FORMAT_D32_SFLOAT));
+    }
+
     _bindlessWriter =
         std::make_unique<BindlessDescriptorSetWriter>(_bindlessDescriptorSet);
     _skyboxHandle = _bindlessWriter->storeTexture(_textureCubemap);
