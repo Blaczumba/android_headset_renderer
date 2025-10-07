@@ -108,9 +108,9 @@ public:
   VulkanApplication(PFN_vkDebugUtilsMessengerCallbackEXT debugCallback,
                     AAssetManager *assetManager,
                     const std::shared_ptr<FileLoader> &fileLoader)
-      : GraphicsPluginVulkan(debugCallback), _assetManager(_logicalDevice, fileLoader),
+      : GraphicsPluginVulkan(debugCallback), _assetManager(_logicalDevice, fileLoader, std::launch::deferred),
         _programManager(fileLoader), _fileLoader(fileLoader) {
-    // setAssetmanager(assetManager);
+    setAssetmanager(assetManager);
   }
 
   Status createResources() override {
@@ -119,8 +119,8 @@ public:
     RETURN_IF_ERROR(createPresentResources());
     RETURN_IF_ERROR(createCommandBuffers());
     RETURN_IF_ERROR(createSyncObjects());
-    // RETURN_IF_ERROR(loadObjects());
-    // RETURN_IF_ERROR(createOctreeScene());
+    RETURN_IF_ERROR(loadObjects());
+    RETURN_IF_ERROR(createOctreeScene());
     return StatusOk();
   }
 
@@ -137,11 +137,7 @@ private:
   TextureHandle _skyboxHandle;
 
   // gltf objects
-  uint32_t index = 0;
   std::unordered_map<std::string, std::pair<TextureHandle, Texture>> _textures;
-  std::unordered_map<std::string, Buffer> _vertexBufferMap;
-  std::unordered_map<std::string, Buffer> _indexBufferMap;
-  std::unordered_map<Entity, uint32_t> _entityToIndex;
   std::vector<Object> _objects;
   std::unique_ptr<Octree> _octree;
   Registry _registry;
@@ -171,7 +167,6 @@ private:
   Status loadCubemap() {
     _assetManager.loadImageAsync(
                                  TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
-
     ASSIGN_OR_RETURN(
         std::string data,
         _fileLoader->loadFileToString(MODELS_PATH "cube.obj"));
@@ -206,6 +201,93 @@ private:
       RETURN_IF_ERROR(
           _indexBufferCube.copyBuffer(commandBuffer, vData.indexBuffer));
       _indexBufferCubeType = vData.indexType;
+    }
+
+    return StatusOk();
+  }
+
+  Status loadObjects() {
+    // TODO needs refactoring
+    ASSIGN_OR_RETURN(
+        const std::vector<VertexData> sceneData,
+        LoadGltfFromFile(_assetManager, MODELS_PATH "sponza/scene.gltf"));
+    const float maxSamplerAnisotropy = _physicalDevice->getMaxSamplerAnisotropy();
+    _objects.reserve(sceneData.size());
+
+    SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
+    const VkCommandBuffer commandBuffer = handle.getCommandBuffer();
+    for (const VertexData &sceneObject : sceneData) {
+      const std::string diffusePath =
+          MODELS_PATH "sponza/" + sceneObject.diffuseTexture;
+      if (!_textures.contains(diffusePath)) {
+        ASSIGN_OR_RETURN(const AssetManager::ImageData &imgData,
+                         _assetManager.getImageData(diffusePath));
+        ASSIGN_OR_RETURN(Texture texture,
+                         createTexture2D(_logicalDevice, commandBuffer, imgData,
+                                         VK_FORMAT_R8G8B8A8_SRGB,
+                                         maxSamplerAnisotropy));
+        _textures.emplace(diffusePath,
+                          std::make_pair(_bindlessWriter->storeTexture(texture),
+                                         std::move(texture)));
+      }
+      const std::string normalPath =
+          MODELS_PATH "sponza/" + sceneObject.normalTexture;
+      if (!_textures.contains(normalPath)) {
+        ASSIGN_OR_RETURN(const AssetManager::ImageData &imgData,
+                         _assetManager.getImageData(normalPath));
+        ASSIGN_OR_RETURN(Texture texture,
+                         createTexture2D(_logicalDevice, commandBuffer, imgData,
+                                         VK_FORMAT_R8G8B8A8_UNORM,
+                                         maxSamplerAnisotropy));
+        _textures.emplace(normalPath,
+                          std::make_pair(_bindlessWriter->storeTexture(texture),
+                                         std::move(texture)));
+      }
+      const std::string metallicRoughnessPath =
+          MODELS_PATH "sponza/" + sceneObject.metallicRoughnessTexture;
+      if (!_textures.contains(metallicRoughnessPath)) {
+        ASSIGN_OR_RETURN(const AssetManager::ImageData &imgData,
+                         _assetManager.getImageData(metallicRoughnessPath));
+        ASSIGN_OR_RETURN(Texture texture,
+                         createTexture2D(_logicalDevice, commandBuffer, imgData,
+                                         VK_FORMAT_R8G8B8A8_UNORM,
+                                         maxSamplerAnisotropy));
+        _textures.emplace(metallicRoughnessPath,
+                          std::make_pair(_bindlessWriter->storeTexture(texture),
+                                         std::move(texture)));
+      }
+      Entity e = _registry.createEntity();
+      _objects.emplace_back("", e);
+      _registry.addComponent<MaterialComponent>(
+          e, MaterialComponent{_textures[diffusePath].first,
+                               _textures[normalPath].first,
+                               _textures[metallicRoughnessPath].first});
+      ASSIGN_OR_RETURN(const AssetManager::VertexData &vData,
+                       _assetManager.getVertexData(sceneObject.vertexResource));
+      MeshComponent msh;
+      ASSIGN_OR_RETURN(msh.vertexBuffer,
+                       Buffer::createVertexBuffer(_logicalDevice,
+                                                  vData.vertexBuffer.getSize()));
+      RETURN_IF_ERROR(
+          msh.vertexBuffer.copyBuffer(commandBuffer, vData.vertexBuffer));
+      ASSIGN_OR_RETURN(
+          msh.indexBuffer,
+          Buffer::createIndexBuffer(_logicalDevice, vData.indexBuffer.getSize()));
+      RETURN_IF_ERROR(
+          msh.indexBuffer.copyBuffer(commandBuffer, vData.indexBuffer));
+      ASSIGN_OR_RETURN(
+          msh.vertexBufferPrimitive,
+          Buffer::createVertexBuffer(_logicalDevice,
+                                     vData.vertexBufferPositions.getSize()));
+      RETURN_IF_ERROR(msh.vertexBufferPrimitive.copyBuffer(
+          commandBuffer, vData.vertexBufferPositions));
+      msh.indexType = vData.indexType;
+      msh.aabb = createAABBfromVertices(sceneObject.positions, sceneObject.model);
+      _registry.addComponent<MeshComponent>(e, std::move(msh));
+
+      TransformComponent trsf;
+      trsf.model = sceneObject.model;
+      _registry.addComponent<TransformComponent>(e, std::move(trsf));
     }
 
     return StatusOk();
