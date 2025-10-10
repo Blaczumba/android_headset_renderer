@@ -24,6 +24,7 @@
 #include "common/entity_component_system/component/material.h"
 #include "common/entity_component_system/component/mesh.h"
 #include "common/entity_component_system/component/transform.h"
+#include "vulkan_wrapper/descriptor_set/descriptor_set_writer.h"
 
 namespace {
 
@@ -135,6 +136,10 @@ private:
   Texture _textureCubemap;
   ShaderProgram _skyboxShaderProgram;
   TextureHandle _skyboxHandle;
+
+  DescriptorSetWriter _dynamicDescriptorSetWriter;
+  Buffer _dynamicUniformBuffersCamera;
+  DescriptorSet _dynamicDescriptorSet;
 
   // gltf objects
   std::unordered_map<std::string, std::pair<TextureHandle, Texture>> _textures;
@@ -336,6 +341,14 @@ private:
         std::make_unique<BindlessDescriptorSetWriter>(_bindlessDescriptorSet);
     _skyboxHandle = _bindlessWriter->storeTexture(_textureCubemap);
 
+    const uint32_t size = _logicalDevice.getPhysicalDevice().getMemoryAlignment(
+        sizeof(UniformBufferCamera));
+    ASSIGN_OR_RETURN(
+        _dynamicUniformBuffersCamera,
+        Buffer::createUniformBuffer(_logicalDevice, MAX_FRAMES_IN_FLIGHT * size));
+    _dynamicDescriptorSetWriter.storeDynamicBuffer(_dynamicUniformBuffersCamera,
+                                                   size);
+
     return StatusOk();
   }
 
@@ -375,12 +388,11 @@ private:
       for (auto &[swapchain, context] : _swapchainImageContexts) {
         context.framebuffers = lib::Buffer<Framebuffer>(context.views.size());
         for (uint8_t i = 0; i < context.views.size(); ++i) {
-          ASSIGN_OR_RETURN(Framebuffer framebuffer,
+          ASSIGN_OR_RETURN(context.framebuffers[i],
                            Framebuffer::createFromSwapchain(
                                commandBuffer, _renderpass,
                                {context.width, context.height},
                                context.views[i], context.attachments));
-          context.framebuffers[i] = std::move(framebuffer);
         }
       }
     }
@@ -414,17 +426,12 @@ private:
   }
 
   Status createSyncObjects() {
-    static constexpr VkSemaphoreCreateInfo semaphoreInfo = {
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     static constexpr VkFenceCreateInfo fenceInfo = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 
     for (auto &[swapchain, context] : _swapchainImageContexts) {
       for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        CHECK_VKCMD(vkCreateSemaphore(_logicalDevice.getVkDevice(),
-                                      &semaphoreInfo, nullptr,
-                                      &context.renderFinishedSemaphores[i]));
         CHECK_VKCMD(vkCreateFence(_logicalDevice.getVkDevice(), &fenceInfo,
                                   nullptr, &context.fences[i]));
       }
@@ -445,21 +452,16 @@ private:
     return proj;
   }
 
-  glm::mat4 toGlm(const XrPosef &pose) {
-    glm::quat orientation = glm::quat(pose.orientation.w, pose.orientation.x,
+  glm::mat4 getViewMatrix(const XrPosef &pose) {
+    const glm::quat orientation = glm::quat(pose.orientation.w, pose.orientation.x,
                                       pose.orientation.y, pose.orientation.z);
 
-    glm::vec3 position =
+    const glm::vec3 position =
         glm::vec3(pose.position.x, pose.position.y, pose.position.z);
 
-    glm::mat4 rotation = glm::mat4_cast(orientation);
-    glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
-
-    return translation * rotation;
-  }
-
-  glm::mat4 getViewMatrix(const XrPosef &pose) {
-    return glm::inverse(toGlm(pose));
+    const glm::mat4 rotation = glm::mat4_cast(orientation);
+    const glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
+    return glm::inverse(translation * rotation);
   }
 
   Status recordCommandBuffer(
