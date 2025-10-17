@@ -548,6 +548,8 @@ private:
   Status recordCommandBuffer(
       const XrCompositionLayerProjectionView &projectionLayerView,
       const Framebuffer &framebuffer,
+      const glm::mat4& viewMatrix,
+      const glm::mat4& projectionMatrix,
       const PrimaryCommandBuffer &primaryCommandBuffer,
       const SecondaryCommandBuffer &secCommandBuffer) {
     primaryCommandBuffer.begin();
@@ -595,8 +597,6 @@ private:
       vkCmdBindIndexBuffer(commandBuffer, _indexBufferCube.getVkBuffer(), 0,
                            _indexBufferCubeType);
 
-      const glm::mat4 projectionMatrix = createProjectionMatrix(projectionLayerView.fov, 0.01f, 50.0f);
-      const glm::mat4 viewMatrix = getViewMatrix(projectionLayerView.pose);
       const PushConstantsSkybox pc = {
           .proj = projectionMatrix,
           .view = viewMatrix,
@@ -815,16 +815,19 @@ private:
 
     // Update uniform buffer:
     const XrVector3f &pos = projectionLayerView.pose.position;
+    const glm::mat4 viewMatrix = getViewMatrix(projectionLayerView.pose);
+    const glm::mat4 projectionMatrix = createProjectionMatrix(
+        projectionLayerView.fov, 0.01f, 50.0f);
     _dynamicUniformBuffersCamera.copyData(
-        UniformBufferCamera{.view = getViewMatrix(projectionLayerView.pose),
-                            .proj = createProjectionMatrix(
-                                projectionLayerView.fov, 0.01f, 50.0f),
+        UniformBufferCamera{.view = viewMatrix,
+                            .proj = projectionMatrix,
                             .pos = {pos.x, pos.y, pos.z}},
         _currentFrame *
             _physicalDevice->getMemoryAlignment(sizeof(UniformBufferCamera)));
 
     recordCommandBuffer(projectionLayerView,
                         context.framebuffers[swapchain_image_index],
+                        viewMatrix, projectionMatrix,
                         context.primaryCommandBuffer[_currentFrame],
                         context.commandBuffers[0][_currentFrame]);
 
