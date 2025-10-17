@@ -514,16 +514,24 @@ private:
   }
 
   glm::mat4 createProjectionMatrix(const XrFovf &fov, float near, float far) {
-    float left = near * tanf(fov.angleLeft);
-    float right = near * tanf(fov.angleRight);
-    float bottom = near * tanf(fov.angleDown);
-    float top = near * tanf(fov.angleUp);
+    const float tanLeft   = tanf(fov.angleLeft);
+    const float tanRight  = tanf(fov.angleRight);
+    const float tanDown   = tanf(fov.angleDown);
+    const float tanUp     = tanf(fov.angleUp);
 
-    glm::mat4 proj = glm::frustum(left, right, bottom, top, near, far);
+    const float tanWidth  = tanRight - tanLeft;
+    const float tanHeight = tanDown - tanUp;
 
-    // Flip Y for Vulkan NDC
-    proj[1][1] = -proj[1][1];
-    return proj;
+    glm::mat4 result(0.0f);
+    result[0][0] = 2.0f / tanWidth;
+    result[1][1] = 2.0f / tanHeight;
+    result[2][0] = (tanRight + tanLeft) / tanWidth;
+    result[2][1] = (tanUp + tanDown) / tanHeight;
+    result[2][2] = -far / (far - near);
+    result[2][3] = -1.0f;
+    result[3][2] = -(far * near) / (far - near);
+
+    return result;
   }
 
   glm::mat4 getViewMatrix(const XrPosef &pose) {
@@ -534,9 +542,7 @@ private:
     const glm::vec3 position =
         glm::vec3(pose.position.x, pose.position.y, pose.position.z);
 
-    const glm::mat4 rotation = glm::mat4_cast(orientation);
-    const glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
-    return glm::inverse(translation * rotation);
+    return glm::translate(glm::mat4_cast(glm::conjugate(orientation)), -position);
   }
 
   Status recordCommandBuffer(

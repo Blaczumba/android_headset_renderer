@@ -267,63 +267,6 @@ public:
                                             // for the views.
     }
 
-    // For each locatable space that we want to visualize, render a 25cm cube.
-    //    std::vector<math::Transform> cubes{};
-    //
-    //    for (XrSpace visualized_space: visualized_spaces_) {
-    //      XrSpaceLocation space_location{};
-    //      space_location.type = XR_TYPE_SPACE_LOCATION;
-    //      auto res = xrLocateSpace(visualized_space, app_space_,
-    //      predicted_display_time, &space_location); if
-    //      (XR_UNQUALIFIED_SUCCESS(res)) {
-    //        if ((space_location.locationFlags &
-    //        XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-    //            (space_location.locationFlags &
-    //            XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-    //          cubes.push_back(math::Transform{
-    //              math::XrQuaternionFToGlm(space_location.pose.orientation),
-    //              math::XrVector3FToGlm(space_location.pose.position),
-    //              {0.25f, 0.25f, 0.25f}});
-    //        }
-    //      } else {
-    //        spdlog::debug("Unable to locate a visualized reference space in
-    //        app space: {}",
-    //                      magic_enum::enum_name(res));
-    //      }
-    //    }
-
-    // Render a 10cm cube scaled by grab_action for each hand. Note renderHand
-    // will only be true when the application has focus.
-    //    for (auto hand: {side::LEFT, side::RIGHT}) {
-    //      XrSpaceLocation space_location{};
-    //      space_location.type = XR_TYPE_SPACE_LOCATION;
-    //      auto res =
-    //          xrLocateSpace(input_.hand_space[hand], app_space_,
-    //          predicted_display_time, &space_location);
-    //      if (XR_UNQUALIFIED_SUCCESS(res)) {
-    //        if ((space_location.locationFlags &
-    //        XR_SPACE_LOCATION_POSITION_VALID_BIT) != 0 &&
-    //            (space_location.locationFlags &
-    //            XR_SPACE_LOCATION_ORIENTATION_VALID_BIT) != 0) {
-    //          float scale = 0.1f * input_.hand_scale[hand];
-    //          cubes.push_back(math::Transform{
-    //              math::XrQuaternionFToGlm(space_location.pose.orientation),
-    //              math::XrVector3FToGlm(space_location.pose.position),
-    //              {scale, scale, scale}});
-    //        }
-    //      } else {
-    //        // Tracking loss is expected when the hand is not active so only
-    //        log a message if the hand is active. if (input_.hand_active[hand]
-    //        == XR_TRUE) {
-    //          const char *hand_name[] = {"left", "right"};
-    //          spdlog::debug("Unable to locate {} hand action space in app
-    //          space: {}",
-    //                        hand_name[hand],
-    //                        magic_enum::enum_name(res));
-    //        }
-    //      }
-    //    }
-
     // Render view to the appropriate part of the swapchain image.
     for (uint32_t i = 0; i < viewCountOutput; i++) {
       const xrw::Swapchain &viewSwapchain = _swapchains[i];
