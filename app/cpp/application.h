@@ -551,7 +551,7 @@ private:
       const glm::mat4& viewMatrix,
       const glm::mat4& projectionMatrix,
       const PrimaryCommandBuffer &primaryCommandBuffer,
-      const SecondaryCommandBuffer &secCommandBuffer) {
+      const SecondaryCommandBuffer &pbrCommandBuffer, const SecondaryCommandBuffer &skyCommandBuffer) {
     primaryCommandBuffer.begin();
     primaryCommandBuffer.beginRenderPass(framebuffer);
 
@@ -570,17 +570,67 @@ private:
       };
     }
 
-    std::future<Status> futures[1];
+    std::future<Status> futures[2];
     futures[0] = std::async(std::launch::async, [&]() -> Status {
-      // Skybox
       const VkCommandBuffer commandBuffer =
-          secCommandBuffer.getVkCommandBuffer();
+          pbrCommandBuffer.getVkCommandBuffer();
 
       if (viewportScissorInheritance) [[likely]] {
         CHECK_VKCMD(
-            secCommandBuffer.begin(framebuffer, &scissorViewportInheritance));
+            pbrCommandBuffer.begin(framebuffer, &scissorViewportInheritance));
       } else {
-        CHECK_VKCMD(secCommandBuffer.begin(framebuffer, nullptr));
+        CHECK_VKCMD(pbrCommandBuffer.begin(framebuffer, nullptr));
+        vkCmdSetViewport(commandBuffer, 0, 1, &framebuffer.getViewport());
+        vkCmdSetScissor(commandBuffer, 0, 1, &framebuffer.getScissor());
+      }
+
+      vkCmdBindPipeline(commandBuffer,
+                        _graphicsPipelineSkybox->getVkPipelineBindPoint(),
+                        _graphicsPipelineSkybox->getVkPipeline());
+
+
+      static const VkDescriptorSet descriptorSet =
+          _bindlessDescriptorSet.getVkDescriptorSet();
+
+      vkCmdBindPipeline(commandBuffer,
+                        _graphicsPipeline->getVkPipelineBindPoint(),
+                        _graphicsPipeline->getVkPipeline());
+
+      const OctreeNode *root = _octree->getRoot();
+      const auto &planes = extractFrustumPlanes(projectionMatrix *
+          viewMatrix);
+
+      VkDescriptorSet descriptorSets[] = {
+          _bindlessDescriptorSet.getVkDescriptorSet(),
+          _dynamicDescriptorSet.getVkDescriptorSet()};
+
+      uint32_t offset;
+
+      _dynamicDescriptorSetWriter.getDynamicBufferSizesWithOffsets(
+          &offset, {_currentFrame});
+
+      vkCmdBindDescriptorSets(commandBuffer,
+                              _graphicsPipeline->getVkPipelineBindPoint(),
+                              _graphicsPipeline->getVkPipelineLayout(), 0,
+                              static_cast<uint32_t>(std::size(descriptorSets)),
+                              descriptorSets, 1, &offset);
+
+      recordOctreeSecondaryCommandBuffer(commandBuffer, root, planes);
+
+      CHECK_VKCMD(vkEndCommandBuffer(commandBuffer));
+
+      return StatusOk();
+    });
+
+    futures[1] = std::async(std::launch::async, [&]() -> Status {
+      const VkCommandBuffer commandBuffer =
+          skyCommandBuffer.getVkCommandBuffer();
+
+      if (viewportScissorInheritance) [[likely]] {
+        CHECK_VKCMD(
+            skyCommandBuffer.begin(framebuffer, &scissorViewportInheritance));
+      } else {
+        CHECK_VKCMD(skyCommandBuffer.begin(framebuffer, nullptr));
         vkCmdSetViewport(commandBuffer, 0, 1, &framebuffer.getViewport());
         vkCmdSetScissor(commandBuffer, 0, 1, &framebuffer.getScissor());
       }
@@ -619,33 +669,6 @@ private:
                            getIndexSize(_indexBufferCubeType),
                        1, 0, 0, 0);
 
-      // PBR
-      vkCmdBindPipeline(commandBuffer,
-                        _graphicsPipeline->getVkPipelineBindPoint(),
-                        _graphicsPipeline->getVkPipeline());
-
-      const OctreeNode *root = _octree->getRoot();
-      const auto &planes = extractFrustumPlanes(projectionMatrix *
-          viewMatrix);
-
-      VkDescriptorSet descriptorSets[] = {
-          _bindlessDescriptorSet.getVkDescriptorSet(),
-          _dynamicDescriptorSet.getVkDescriptorSet()};
-
-      uint32_t offset;
-
-      _dynamicDescriptorSetWriter.getDynamicBufferSizesWithOffsets(
-          &offset, {_currentFrame});
-
-      vkCmdBindDescriptorSets(commandBuffer,
-                              _graphicsPipeline->getVkPipelineBindPoint(),
-                              _graphicsPipeline->getVkPipelineLayout(), 0,
-                              static_cast<uint32_t>(std::size(descriptorSets)),
-                              descriptorSets, 1, &offset);
-
-      recordOctreeSecondaryCommandBuffer(commandBuffer, root, planes);
-      // PBR
-
       CHECK_VKCMD(vkEndCommandBuffer(commandBuffer));
 
       return StatusOk();
@@ -655,7 +678,7 @@ private:
                   [](std::future<Status> &future) { future.wait(); });
 
     primaryCommandBuffer.executeSecondaryCommandBuffers(
-        {secCommandBuffer.getVkCommandBuffer()});
+        {pbrCommandBuffer.getVkCommandBuffer(), skyCommandBuffer.getVkCommandBuffer()});
     primaryCommandBuffer.endRenderPass();
 
     CHECK_VKCMD(primaryCommandBuffer.end());
@@ -829,7 +852,8 @@ private:
                         context.framebuffers[swapchain_image_index],
                         viewMatrix, projectionMatrix,
                         context.primaryCommandBuffer[_currentFrame],
-                        context.commandBuffers[0][_currentFrame]);
+                        context.commandBuffers[0][_currentFrame],
+                        context.commandBuffers[1][_currentFrame]);
 
     VkSubmitInfo submitInfo = {.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO};
 
