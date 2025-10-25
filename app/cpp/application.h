@@ -59,6 +59,7 @@ ErrorOr<Texture> createCubemap(const LogicalDevice &logicalDevice,
       .withMipLevels(imageData.mipLevels)
       .withUsage(VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
       .withLayerCount(6)
+      .withAdditionalCreateInfoFlags(VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
       .withMaxAnisotropy(samplerAnisotropy)
       .withMaxLod(static_cast<float>(imageData.mipLevels))
       .withLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
@@ -416,18 +417,18 @@ private:
         .addDepthAttachment(VK_FORMAT_D24_UNORM_S8_UINT,
                             VK_ATTACHMENT_STORE_OP_DONT_CARE);
 
-    _renderpass = Renderpass(_logicalDevice, attachmentsLayout);
-    RETURN_IF_ERROR(_renderpass.addSubpass({0, 1, 2}));
-    _renderpass.addDependency(VK_SUBPASS_EXTERNAL, 0,
-                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                  VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                              VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                              VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                  VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                              VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-    RETURN_IF_ERROR(_renderpass.build());
+    ASSIGN_OR_RETURN(_renderpass, RenderpassBuilder(attachmentsLayout)
+        .addDependency(VK_SUBPASS_EXTERNAL, 0,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                       VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                           VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
+        .addSubpass({ 0, 1, 2 })
+        .build(_logicalDevice));
 
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
@@ -462,9 +463,9 @@ private:
     attachmentLayout.addShadowAttachment(
         VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-    _shadowRenderPass = Renderpass(_logicalDevice, attachmentLayout);
-    RETURN_IF_ERROR(_shadowRenderPass.addSubpass({0}));
-    RETURN_IF_ERROR(_shadowRenderPass.build());
+    ASSIGN_OR_RETURN(_shadowRenderPass, RenderpassBuilder(attachmentLayout)
+        .addSubpass({ 0 })
+        .build(_logicalDevice));
     ASSIGN_OR_RETURN(_shadowFramebuffer,
                      Framebuffer::createFromTextures(_shadowRenderPass,
                                                      std::span(&_shadowMap, 1)));
