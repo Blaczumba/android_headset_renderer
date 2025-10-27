@@ -52,7 +52,7 @@ ErrorOr<Texture> createCubemap(const LogicalDevice &logicalDevice,
                                VkCommandBuffer commandBuffer,
                                const AssetManager::ImageData &imageData,
                                VkFormat format, float samplerAnisotropy) {
-  return TextureBuilder()
+  ASSIGN_OR_RETURN(Texture texture, TextureBuilder()
       .withAspect(VK_IMAGE_ASPECT_COLOR_BIT)
       .withExtent(imageData.width, imageData.height)
       .withFormat(format)
@@ -65,42 +65,48 @@ ErrorOr<Texture> createCubemap(const LogicalDevice &logicalDevice,
       .withLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
       .buildImage(logicalDevice, commandBuffer,
                   imageData.stagingBuffer.getVkBuffer(),
-                  createBufferImageCopyRegions(imageData.copyRegions));
+                  createBufferImageCopyRegions(imageData.copyRegions)));
+  RETURN_IF_ERROR(texture.addCreateVkImageView(0, imageData.mipLevels, 0, 6));
+  return texture;
 }
 
 ErrorOr<Texture> createShadowmap(const LogicalDevice &logicalDevice,
                                  VkCommandBuffer commandBuffer, uint32_t width,
                                  uint32_t height, VkFormat format) {
-  return TextureBuilder()
+  ASSIGN_OR_RETURN(Texture texture, TextureBuilder()
       .withAspect(VK_IMAGE_ASPECT_DEPTH_BIT)
       .withExtent(width, height)
       .withFormat(format)
       .withUsage(VK_IMAGE_USAGE_SAMPLED_BIT |
-                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
       .withAddressModes(VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
                         VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER)
       .withCompareOp(VK_COMPARE_OP_LESS_OR_EQUAL)
       .withBorderColor(VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE)
-      .buildImageSampler(logicalDevice, commandBuffer);
+      .buildImageSampler(logicalDevice, commandBuffer));
+  RETURN_IF_ERROR(texture.addCreateVkImageView(0, 1, 0, 1));
+  return texture;
 }
 
 ErrorOr<Texture> createTexture2D(const LogicalDevice &logicalDevice,
                                  VkCommandBuffer commandBuffer,
                                  const AssetManager::ImageData &imageData,
                                  VkFormat format, float samplerAnisotropy) {
-  return TextureBuilder()
+  ASSIGN_OR_RETURN(Texture texture, TextureBuilder()
       .withAspect(VK_IMAGE_ASPECT_COLOR_BIT)
       .withExtent(imageData.width, imageData.height)
       .withFormat(format)
       .withMipLevels(imageData.mipLevels)
       .withUsage(VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
+          VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT)
       .withMaxAnisotropy(samplerAnisotropy)
       .withMaxLod(static_cast<float>(imageData.mipLevels))
       .buildMipmapImage(logicalDevice, commandBuffer,
                         imageData.stagingBuffer.getVkBuffer(),
-                        createBufferImageCopyRegions(imageData.copyRegions));
+                        createBufferImageCopyRegions(imageData.copyRegions)));
+  RETURN_IF_ERROR(texture.addCreateVkImageView(0, imageData.mipLevels, 0, 1));
+  return texture;
 }
 
 } // namespace
