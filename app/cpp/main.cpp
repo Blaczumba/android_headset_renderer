@@ -83,15 +83,15 @@ public:
         _instance,
         xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
     ASSIGN_OR_RETURN(_system, xrw::System::create(*_instance));
-    RETURN_IF_ERROR(_graphicsPlugin->initialize(_instance->getXrInstance(),
-                                                _system->getXrSystemId()));
+    _graphicsPlugin->initialize(_instance->getXrInstance(),
+                                _system->getXrSystemId());
     ASSIGN_OR_RETURN(_session,
                      xrw::Session::create(*_system, *_graphicsPlugin));
     ASSIGN_OR_RETURN(_swapchains, xrw::SwapchainBuilder()
                                       .withArraySize(2)
                                       .withViewConfigType(kConfigType)
                                       .build(*_session, *_graphicsPlugin));
-    RETURN_IF_ERROR(_graphicsPlugin->createResources());
+    _graphicsPlugin->createResources();
     ASSIGN_OR_RETURN(_space, xrw::Space::create(_session->getXrSession(),
                                                 XR_REFERENCE_SPACE_TYPE_LOCAL));
     return StatusOk();
@@ -139,8 +139,7 @@ public:
     XrActionStateBoolean quitValue = {.type = XR_TYPE_ACTION_STATE_BOOLEAN};
 
     // CHECK_XRCMD
-    xrGetActionStateBoolean(_session->getXrSession(), &getInfo,
-                                        &quitValue);
+    xrGetActionStateBoolean(_session->getXrSession(), &getInfo, &quitValue);
     if ((quitValue.isActive == XR_TRUE) &&
         (quitValue.changedSinceLastSync == XR_TRUE) &&
         (quitValue.currentState == XR_TRUE)) {
@@ -213,12 +212,14 @@ public:
         .type = XR_TYPE_FRAME_STATE,
     };
     CHECK_XRCMD(
-        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState), "Failed to xrWaitFrame.");
+        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState),
+        "Failed to xrWaitFrame.");
 
     const XrFrameBeginInfo frameBeginInfo{
         .type = XR_TYPE_FRAME_BEGIN_INFO,
     };
-    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo), "Failed to xrBeginFrame.");
+    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo),
+                "Failed to xrBeginFrame.");
 
     std::vector<XrCompositionLayerBaseHeader *> layers{};
     XrCompositionLayerProjection layer{
@@ -241,7 +242,8 @@ public:
         .layerCount = static_cast<uint32_t>(layers.size()),
         .layers = layers.data()};
 
-    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo), "Failed to xrEndFrame.");
+    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo),
+                "Failed to xrEndFrame.");
     return StatusOk();
   }
 
@@ -262,7 +264,8 @@ public:
     lib::Buffer<XrView> views(_swapchains.size(), {.type = XR_TYPE_VIEW});
     CHECK_XRCMD(xrLocateViews(_session->getXrSession(), &viewLocateInfo,
                               &viewState, views.size(), &viewCountOutput,
-                              views.data()), "Failed to xrLocateViews.");
+                              views.data()),
+                "Failed to xrLocateViews.");
     if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
       return Error(EngineError::NOT_FOUND); // There is no valid tracking poses
@@ -278,14 +281,16 @@ public:
 
       uint32_t swapchainImageIndex;
       CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.getSwapchain(),
-                                          &acquireInfo, &swapchainImageIndex), "Failed to xrAcquireSwapchainImage.");
+                                          &acquireInfo, &swapchainImageIndex),
+                  "Failed to xrAcquireSwapchainImage.");
 
       const XrSwapchainImageWaitInfo imageWaitInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
           .timeout = XR_INFINITE_DURATION};
 
       CHECK_XRCMD(
-          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo), "Failed to xrWaitSwapchainImage.");
+          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo),
+          "Failed to xrWaitSwapchainImage.");
 
       const XrCompositionLayerProjectionView &projectionLayerView =
           projectionLayerViews.emplace_back(XrCompositionLayerProjectionView{
@@ -296,13 +301,13 @@ public:
               .subImage.imageRect.offset = {0, 0},
               .subImage.imageRect.extent = viewSwapchain.getXrExtent2Di()});
 
-      RETURN_IF_ERROR(
-          _graphicsPlugin->draw(projectionLayerView, swapchainImageIndex));
+      _graphicsPlugin->draw(projectionLayerView, swapchainImageIndex);
 
       const XrSwapchainImageReleaseInfo releaseInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
       CHECK_XRCMD(
-          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo), "Failed to xrReleaseSwapchainImage.");
+          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo),
+          "Failed to xrReleaseSwapchainImage.");
     }
 
     layer.space = _space->getXrSpace();

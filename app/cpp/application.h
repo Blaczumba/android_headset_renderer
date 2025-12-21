@@ -16,6 +16,7 @@
 #include "common/model_loader/obj_loader/obj_loader.h"
 #include "common/model_loader/tiny_gltf_loader/tiny_gltf_loader.h"
 #include "common/scene/octree.h"
+#include "common/status/status.h"
 #include "openxr_wrapper/util/check.h"
 #include "vulkan/resource_manager/asset_manager.h"
 #include "vulkan/resource_manager/pipeline_manager.h"
@@ -130,20 +131,19 @@ public:
     setAssetmanager(assetManager);
   }
 
-  Status createResources() override {
-    RETURN_IF_ERROR(loadCubemap());
-    RETURN_IF_ERROR(createDescriptorSets());
-    RETURN_IF_ERROR(createPresentResources());
-    RETURN_IF_ERROR(createShadowResources());
-    RETURN_IF_ERROR(createCommandBuffers());
-    RETURN_IF_ERROR(createSyncObjects());
-    RETURN_IF_ERROR(loadObjects());
-    RETURN_IF_ERROR(createOctreeScene());
+  void createResources() override {
+    loadCubemap();
+    createDescriptorSets();
+    createPresentResources();
+    createShadowResources();
+    createCommandBuffers();
+    createSyncObjects();
+    loadObjects();
+    createOctreeScene();
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
       recordShadowCommandBuffer(handle.getCommandBuffer(), 0);
     }
-    return StatusOk();
   }
 
 private:
@@ -785,8 +785,8 @@ private:
     }
   }
 
-  Status draw(const XrCompositionLayerProjectionView &projectionLayerView,
-              uint32_t swapchain_image_index) override {
+  void draw(const XrCompositionLayerProjectionView &projectionLayerView,
+            uint32_t swapchain_image_index) override {
     const SwapchainContext &context =
         _swapchainImageContexts[projectionLayerView.subImage.swapchain];
     vkWaitForFences(_logicalDevice.getVkDevice(), 1,
@@ -840,7 +840,6 @@ private:
     if (++_currentFrame == MAX_FRAMES_IN_FLIGHT) {
       _currentFrame = 0;
     }
-    return StatusOk();
   }
 };
 
