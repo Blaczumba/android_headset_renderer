@@ -412,9 +412,9 @@ private:
     }
 
     _graphicsPipeline = _pipelineManager.createPBRProgram(_renderpass)
-                            .getVkGraphicsPipelineCreateInfo();
+                            .createPipeline();
     _skyboxPipeline = _pipelineManager.createSkyboxProgram(_renderpass)
-                          .getVkGraphicsPipelineCreateInfo();
+                          .createPipeline();
   }
 
   void createShadowResources() {
@@ -429,7 +429,7 @@ private:
         _shadowRenderPass, std::span(&_shadowMap, 1));
 
     _shadowPipeline = _pipelineManager.createShadowProgram(_shadowRenderPass)
-                          .getVkGraphicsPipelineCreateInfo();
+                          .createPipeline();
   }
 
   void createCommandBuffers() {
