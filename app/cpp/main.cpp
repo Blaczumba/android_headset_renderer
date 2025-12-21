@@ -5,8 +5,6 @@
 #include <spdlog/sinks/android_sink.h>
 #include <spdlog/spdlog.h>
 
-#include <unistd.h>
-
 #include "application.h"
 #include "openxr_wrapper/graphics_plugin/graphics_plugin_vulkan.h"
 #include "openxr_wrapper/instance/instance.h"
@@ -82,18 +80,17 @@ public:
     ASSIGN_OR_RETURN(
         _instance,
         xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
-    ASSIGN_OR_RETURN(_system, xrw::System::create(*_instance));
+    _system = xrw::System::create(*_instance);
     _graphicsPlugin->initialize(_instance->getXrInstance(),
                                 _system->getXrSystemId());
-    ASSIGN_OR_RETURN(_session,
-                     xrw::Session::create(*_system, *_graphicsPlugin));
-    ASSIGN_OR_RETURN(_swapchains, xrw::SwapchainBuilder()
-                                      .withArraySize(2)
-                                      .withViewConfigType(kConfigType)
-                                      .build(*_session, *_graphicsPlugin));
+    _session = xrw::Session::create(*_system, *_graphicsPlugin);
+    _swapchains = xrw::SwapchainBuilder()
+                      .withArraySize(2)
+                      .withViewConfigType(kConfigType)
+                      .build(*_session, *_graphicsPlugin);
     _graphicsPlugin->createResources();
-    ASSIGN_OR_RETURN(_space, xrw::Space::create(_session->getXrSession(),
-                                                XR_REFERENCE_SPACE_TYPE_LOCAL));
+    _space = xrw::Space::create(_session->getXrSession(),
+                                XR_REFERENCE_SPACE_TYPE_LOCAL);
     return StatusOk();
   }
 
@@ -130,7 +127,7 @@ public:
     }
   }
 
-  Status pollActions() {
+  void pollActions() {
     const XrActionStateGetInfo getInfo = {.type = XR_TYPE_ACTION_STATE_GET_INFO,
                                           .next = nullptr,
                                           .action = _input.quit_action,
@@ -146,7 +143,6 @@ public:
       // CHECK_XRCMD
       xrRequestExitSession(_session->getXrSession());
     }
-    return StatusOk();
   }
 
   const XrEventDataBaseHeader *tryReadNextEvent() {
@@ -168,12 +164,12 @@ public:
     return nullptr;
   }
 
-  Status handleSessionStateChangedEvent(
+  void handleSessionStateChangedEvent(
       const XrEventDataSessionStateChanged &stateChangedEvent) {
     if ((stateChangedEvent.session != XR_NULL_HANDLE) &&
         (stateChangedEvent.session != _session->getXrSession())) {
       spdlog::error("XrEventDataSessionStateChanged for unknown session");
-      return StatusOk();
+      return;
     }
     _sessionState = stateChangedEvent.state;
     switch (_sessionState) {
@@ -194,14 +190,14 @@ public:
     default:
       break;
     }
-    return StatusOk();
   }
 
   bool isSessionRunning() const { return _sessionRunning; }
 
-  Status renderFrame() {
+  void renderFrame() {
     if (_session->getXrSession() == XR_NULL_HANDLE) {
-      return Error(EngineError::ALREADY_INITIALIZED);
+      throw EngineException(
+          "XrSession cannot be XR_NULL_HANDLE when rendering a frame.");
     }
 
     const XrFrameWaitInfo frameWaitInfo{
@@ -244,10 +240,9 @@ public:
 
     CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo),
                 "Failed to xrEndFrame.");
-    return StatusOk();
   }
 
-  Status renderLayer(
+  bool renderLayer(
       XrTime predictedDisplayTime,
       std::vector<XrCompositionLayerProjectionView> &projectionLayerViews,
       XrCompositionLayerProjection &layer) {
@@ -268,8 +263,8 @@ public:
                 "Failed to xrLocateViews.");
     if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-      return Error(EngineError::NOT_FOUND); // There is no valid tracking poses
-                                            // for the views.
+      return false; // There is no valid tracking poses
+                    // for the views.
     }
 
     // Render view to the appropriate part of the swapchain image.
@@ -313,7 +308,7 @@ public:
     layer.space = _space->getXrSpace();
     layer.viewCount = static_cast<uint32_t>(projectionLayerViews.size());
     layer.views = projectionLayerViews.data();
-    return StatusOk();
+    return true;
   }
 
   struct InputState {
