@@ -138,12 +138,14 @@ public:
 
     XrActionStateBoolean quitValue = {.type = XR_TYPE_ACTION_STATE_BOOLEAN};
 
-    CHECK_XRCMD(xrGetActionStateBoolean(_session->getXrSession(), &getInfo,
-                                        &quitValue));
+    // CHECK_XRCMD
+    xrGetActionStateBoolean(_session->getXrSession(), &getInfo,
+                                        &quitValue);
     if ((quitValue.isActive == XR_TRUE) &&
         (quitValue.changedSinceLastSync == XR_TRUE) &&
         (quitValue.currentState == XR_TRUE)) {
-      CHECK_XRCMD(xrRequestExitSession(_session->getXrSession()));
+      // CHECK_XRCMD
+      xrRequestExitSession(_session->getXrSession());
     }
     return StatusOk();
   }
@@ -181,13 +183,13 @@ public:
           .type = XR_TYPE_SESSION_BEGIN_INFO,
           .primaryViewConfigurationType = kConfigType};
 
-      CHECK_XRCMD(xrBeginSession(_session->getXrSession(), &sessionBeginInfo));
+      xrBeginSession(_session->getXrSession(), &sessionBeginInfo);
       _sessionRunning = true;
       break;
     }
     case XR_SESSION_STATE_STOPPING: {
       _sessionRunning = false;
-      CHECK_XRCMD(xrEndSession(_session->getXrSession()));
+      xrEndSession(_session->getXrSession());
       break;
     }
     default:
@@ -211,12 +213,12 @@ public:
         .type = XR_TYPE_FRAME_STATE,
     };
     CHECK_XRCMD(
-        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState));
+        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState), "Failed to xrWaitFrame.");
 
     const XrFrameBeginInfo frameBeginInfo{
         .type = XR_TYPE_FRAME_BEGIN_INFO,
     };
-    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo));
+    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo), "Failed to xrBeginFrame.");
 
     std::vector<XrCompositionLayerBaseHeader *> layers{};
     XrCompositionLayerProjection layer{
@@ -239,7 +241,7 @@ public:
         .layerCount = static_cast<uint32_t>(layers.size()),
         .layers = layers.data()};
 
-    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo));
+    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo), "Failed to xrEndFrame.");
     return StatusOk();
   }
 
@@ -260,7 +262,7 @@ public:
     lib::Buffer<XrView> views(_swapchains.size(), {.type = XR_TYPE_VIEW});
     CHECK_XRCMD(xrLocateViews(_session->getXrSession(), &viewLocateInfo,
                               &viewState, views.size(), &viewCountOutput,
-                              views.data()));
+                              views.data()), "Failed to xrLocateViews.");
     if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
       return Error(EngineError::NOT_FOUND); // There is no valid tracking poses
@@ -276,14 +278,14 @@ public:
 
       uint32_t swapchainImageIndex;
       CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.getSwapchain(),
-                                          &acquireInfo, &swapchainImageIndex));
+                                          &acquireInfo, &swapchainImageIndex), "Failed to xrAcquireSwapchainImage.");
 
       const XrSwapchainImageWaitInfo imageWaitInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
           .timeout = XR_INFINITE_DURATION};
 
       CHECK_XRCMD(
-          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo));
+          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo), "Failed to xrWaitSwapchainImage.");
 
       const XrCompositionLayerProjectionView &projectionLayerView =
           projectionLayerViews.emplace_back(XrCompositionLayerProjectionView{
@@ -300,7 +302,7 @@ public:
       const XrSwapchainImageReleaseInfo releaseInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
       CHECK_XRCMD(
-          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo));
+          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo), "Failed to xrReleaseSwapchainImage.");
     }
 
     layer.space = _space->getXrSpace();
