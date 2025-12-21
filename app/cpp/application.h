@@ -130,20 +130,19 @@ public:
     setAssetmanager(assetManager);
   }
 
-  Status createResources() override {
-    RETURN_IF_ERROR(loadCubemap());
-    RETURN_IF_ERROR(createDescriptorSets());
-    RETURN_IF_ERROR(createPresentResources());
-    RETURN_IF_ERROR(createShadowResources());
-    RETURN_IF_ERROR(createCommandBuffers());
-    RETURN_IF_ERROR(createSyncObjects());
-    RETURN_IF_ERROR(loadObjects());
-    RETURN_IF_ERROR(createOctreeScene());
+  void createResources() override {
+    loadCubemap();
+    createDescriptorSets();
+    createPresentResources();
+    createShadowResources();
+    createCommandBuffers();
+    createSyncObjects();
+    loadObjects();
+    createOctreeScene();
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
       recordShadowCommandBuffer(handle.getCommandBuffer(), 0);
     }
-    return StatusOk();
   }
 
 private:
@@ -194,7 +193,7 @@ private:
 
   uint8_t _currentFrame = 0;
 
-  Status loadCubemap() {
+  void loadCubemap() {
     _assetManager.loadImageAsync(TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
     std::string data = _fileLoader->loadFileToString(MODELS_PATH "cube.obj");
     VertexData vertexDataCube = loadObj(_assetManager, "cube.obj", data);
@@ -222,11 +221,9 @@ private:
       _indexBufferCube.copyBuffer(commandBuffer, vData.indexBuffer);
       _indexBufferCubeType = vData.indexType;
     }
-
-    return StatusOk();
   }
 
-  Status loadObjects() {
+  void loadObjects() {
     // TODO needs refactoring
     const std::vector<VertexData> sceneData =
         LoadGltfFromFile(_assetManager, MODELS_PATH "sponza/scene.gltf");
@@ -301,11 +298,9 @@ private:
       trsf.model = sceneObject.model;
       _registry.addComponent<TransformComponent>(e, std::move(trsf));
     }
-
-    return StatusOk();
   }
 
-  Status createOctreeScene() {
+  void createOctreeScene() {
     AABB sceneAABB =
         _registry.getComponent<MeshComponent>(_objects[0].getEntity()).aabb;
 
@@ -319,11 +314,9 @@ private:
       _octree->addObject(
           &object,
           _registry.getComponent<MeshComponent>(object.getEntity()).aabb);
-
-    return StatusOk();
   }
 
-  Status createDescriptorSets() {
+  void createDescriptorSets() {
     _descriptorPool = DescriptorPool::create(
         _logicalDevice, 150, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
 
@@ -372,14 +365,12 @@ private:
         glm::lookAt(_ubLight.pos, glm::vec3(-3.82383f, 3.66503f, 1.30751f),
                     glm::vec3(0.0f, 1.0f, 0.0f));
     _lightBuffer.copyData(_ubLight, 0);
-
-    return StatusOk();
   }
 
-  Status createPresentResources() {
+  void createPresentResources() {
     static constexpr VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_4_BIT;
     if (_swapchainImageContexts.empty()) {
-      return Error(EngineError::EMPTY_COLLECTION);
+      throw EngineException("Swapchain context must have a valid swapchain.");
     }
     const VkFormat swapchainImageFormat =
         _swapchainImageContexts.cbegin()->second.format;
@@ -424,11 +415,9 @@ private:
                             .getVkGraphicsPipelineCreateInfo();
     _skyboxPipeline = _pipelineManager.createSkyboxProgram(_renderpass)
                           .getVkGraphicsPipelineCreateInfo();
-
-    return StatusOk();
   }
 
-  Status createShadowResources() {
+  void createShadowResources() {
     AttachmentLayout attachmentLayout;
     attachmentLayout.addShadowAttachment(
         VK_FORMAT_D32_SFLOAT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
@@ -441,10 +430,9 @@ private:
 
     _shadowPipeline = _pipelineManager.createShadowProgram(_shadowRenderPass)
                           .getVkGraphicsPipelineCreateInfo();
-    return StatusOk();
   }
 
-  Status createCommandBuffers() {
+  void createCommandBuffers() {
     for (auto &[swapchain, context] : _swapchainImageContexts) {
       for (int i = 0; i < MAX_THREADS_IN_POOL + 1; i++) {
         context.commandPools[i] = CommandPool::create(_logicalDevice);
@@ -459,10 +447,9 @@ private:
                 VK_COMMAND_BUFFER_LEVEL_SECONDARY);
       }
     }
-    return StatusOk();
   }
 
-  Status createSyncObjects() {
+  void createSyncObjects() {
     static constexpr VkFenceCreateInfo fenceInfo = {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT};
@@ -473,7 +460,6 @@ private:
                       &context.fences[i]);
       }
     }
-    return StatusOk();
   }
 
   glm::mat4 createProjectionMatrix(const XrFovf &fov, float near, float far) {
@@ -509,7 +495,7 @@ private:
                           -position);
   }
 
-  Status recordCommandBuffer(
+  void recordCommandBuffer(
       const XrCompositionLayerProjectionView &projectionLayerView,
       const Framebuffer &framebuffer, const glm::mat4 &viewMatrix,
       const glm::mat4 &projectionMatrix,
@@ -534,8 +520,8 @@ private:
       };
     }
 
-    std::future<Status> futures[2];
-    futures[0] = std::async(std::launch::async, [&]() -> Status {
+    std::future<void> futures[2];
+    futures[0] = std::async(std::launch::async, [&]() -> void {
       const VkCommandBuffer commandBuffer =
           pbrCommandBuffer.getVkCommandBuffer();
 
@@ -582,11 +568,9 @@ private:
 
       CHECK_VKCMD(vkEndCommandBuffer(commandBuffer),
                   "Failed to end command buffer.");
-
-      return StatusOk();
     });
 
-    futures[1] = std::async(std::launch::async, [&]() -> Status {
+    futures[1] = std::async(std::launch::async, [&]() -> void {
       const VkCommandBuffer commandBuffer =
           skyCommandBuffer.getVkCommandBuffer();
 
@@ -634,12 +618,10 @@ private:
 
       CHECK_VKCMD(vkEndCommandBuffer(commandBuffer),
                   "Failed to end command buffer.");
-
-      return StatusOk();
     });
 
     std::for_each(std::begin(futures), std::end(futures),
-                  [](std::future<Status> &future) { future.wait(); });
+                  [](std::future<void> &future) { future.wait(); });
 
     primaryCommandBuffer.executeSecondaryCommandBuffers(
         {pbrCommandBuffer.getVkCommandBuffer(),
@@ -647,7 +629,6 @@ private:
     primaryCommandBuffer.endRenderPass();
 
     CHECK_VKCMD(primaryCommandBuffer.end(), "Failed to end");
-    return StatusOk();
   }
 
   void recordShadowCommandBuffer(VkCommandBuffer commandBuffer,
@@ -785,8 +766,8 @@ private:
     }
   }
 
-  Status draw(const XrCompositionLayerProjectionView &projectionLayerView,
-              uint32_t swapchain_image_index) override {
+  void draw(const XrCompositionLayerProjectionView &projectionLayerView,
+            uint32_t swapchain_image_index) override {
     const SwapchainContext &context =
         _swapchainImageContexts[projectionLayerView.subImage.swapchain];
     vkWaitForFences(_logicalDevice.getVkDevice(), 1,
@@ -840,7 +821,6 @@ private:
     if (++_currentFrame == MAX_FRAMES_IN_FLIGHT) {
       _currentFrame = 0;
     }
-    return StatusOk();
   }
 };
 

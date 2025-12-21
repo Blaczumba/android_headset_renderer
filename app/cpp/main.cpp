@@ -5,8 +5,6 @@
 #include <spdlog/sinks/android_sink.h>
 #include <spdlog/spdlog.h>
 
-#include <unistd.h>
-
 #include "application.h"
 #include "openxr_wrapper/graphics_plugin/graphics_plugin_vulkan.h"
 #include "openxr_wrapper/instance/instance.h"
@@ -71,30 +69,27 @@ class VrApp {
 public:
   VrApp() = default;
 
-  Status init(void *applicationVm, void *applicationActivity,
-              AAssetManager *assetManager) {
+  void init(void *applicationVm, void *applicationActivity,
+            AAssetManager *assetManager) {
     xrw::AndroidData data = {applicationVm, applicationActivity};
     _platform = std::make_unique<xrw::AndroidPlatform>(data);
     _graphicsPlugin = std::make_unique<xrw::VulkanApplication>(
         debugCallback, assetManager,
         std::make_unique<AndroidFileLoader>(assetManager));
 
-    ASSIGN_OR_RETURN(
-        _instance,
-        xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
-    ASSIGN_OR_RETURN(_system, xrw::System::create(*_instance));
-    RETURN_IF_ERROR(_graphicsPlugin->initialize(_instance->getXrInstance(),
-                                                _system->getXrSystemId()));
-    ASSIGN_OR_RETURN(_session,
-                     xrw::Session::create(*_system, *_graphicsPlugin));
-    ASSIGN_OR_RETURN(_swapchains, xrw::SwapchainBuilder()
-                                      .withArraySize(2)
-                                      .withViewConfigType(kConfigType)
-                                      .build(*_session, *_graphicsPlugin));
-    RETURN_IF_ERROR(_graphicsPlugin->createResources());
-    ASSIGN_OR_RETURN(_space, xrw::Space::create(_session->getXrSession(),
-                                                XR_REFERENCE_SPACE_TYPE_LOCAL));
-    return StatusOk();
+    _instance =
+        xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin);
+    _system = xrw::System::create(*_instance);
+    _graphicsPlugin->initialize(_instance->getXrInstance(),
+                                _system->getXrSystemId());
+    _session = xrw::Session::create(*_system, *_graphicsPlugin);
+    _swapchains = xrw::SwapchainBuilder()
+                      .withArraySize(2)
+                      .withViewConfigType(kConfigType)
+                      .build(*_session, *_graphicsPlugin);
+    _graphicsPlugin->createResources();
+    _space = xrw::Space::create(_session->getXrSession(),
+                                XR_REFERENCE_SPACE_TYPE_LOCAL);
   }
 
   void pollEvents() {
@@ -130,7 +125,7 @@ public:
     }
   }
 
-  Status pollActions() {
+  void pollActions() {
     const XrActionStateGetInfo getInfo = {.type = XR_TYPE_ACTION_STATE_GET_INFO,
                                           .next = nullptr,
                                           .action = _input.quit_action,
@@ -138,14 +133,14 @@ public:
 
     XrActionStateBoolean quitValue = {.type = XR_TYPE_ACTION_STATE_BOOLEAN};
 
-    CHECK_XRCMD(xrGetActionStateBoolean(_session->getXrSession(), &getInfo,
-                                        &quitValue));
+    // CHECK_XRCMD
+    xrGetActionStateBoolean(_session->getXrSession(), &getInfo, &quitValue);
     if ((quitValue.isActive == XR_TRUE) &&
         (quitValue.changedSinceLastSync == XR_TRUE) &&
         (quitValue.currentState == XR_TRUE)) {
-      CHECK_XRCMD(xrRequestExitSession(_session->getXrSession()));
+      // CHECK_XRCMD
+      xrRequestExitSession(_session->getXrSession());
     }
-    return StatusOk();
   }
 
   const XrEventDataBaseHeader *tryReadNextEvent() {
@@ -167,12 +162,12 @@ public:
     return nullptr;
   }
 
-  Status handleSessionStateChangedEvent(
+  void handleSessionStateChangedEvent(
       const XrEventDataSessionStateChanged &stateChangedEvent) {
     if ((stateChangedEvent.session != XR_NULL_HANDLE) &&
         (stateChangedEvent.session != _session->getXrSession())) {
       spdlog::error("XrEventDataSessionStateChanged for unknown session");
-      return StatusOk();
+      return;
     }
     _sessionState = stateChangedEvent.state;
     switch (_sessionState) {
@@ -181,26 +176,26 @@ public:
           .type = XR_TYPE_SESSION_BEGIN_INFO,
           .primaryViewConfigurationType = kConfigType};
 
-      CHECK_XRCMD(xrBeginSession(_session->getXrSession(), &sessionBeginInfo));
+      xrBeginSession(_session->getXrSession(), &sessionBeginInfo);
       _sessionRunning = true;
       break;
     }
     case XR_SESSION_STATE_STOPPING: {
       _sessionRunning = false;
-      CHECK_XRCMD(xrEndSession(_session->getXrSession()));
+      xrEndSession(_session->getXrSession());
       break;
     }
     default:
       break;
     }
-    return StatusOk();
   }
 
   bool isSessionRunning() const { return _sessionRunning; }
 
-  Status renderFrame() {
+  void renderFrame() {
     if (_session->getXrSession() == XR_NULL_HANDLE) {
-      return Error(EngineError::ALREADY_INITIALIZED);
+      throw EngineException(
+          "XrSession cannot be XR_NULL_HANDLE when rendering a frame.");
     }
 
     const XrFrameWaitInfo frameWaitInfo{
@@ -211,12 +206,14 @@ public:
         .type = XR_TYPE_FRAME_STATE,
     };
     CHECK_XRCMD(
-        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState));
+        xrWaitFrame(_session->getXrSession(), &frameWaitInfo, &frameState),
+        "Failed to xrWaitFrame.");
 
     const XrFrameBeginInfo frameBeginInfo{
         .type = XR_TYPE_FRAME_BEGIN_INFO,
     };
-    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo));
+    CHECK_XRCMD(xrBeginFrame(_session->getXrSession(), &frameBeginInfo),
+                "Failed to xrBeginFrame.");
 
     std::vector<XrCompositionLayerBaseHeader *> layers{};
     XrCompositionLayerProjection layer{
@@ -239,11 +236,11 @@ public:
         .layerCount = static_cast<uint32_t>(layers.size()),
         .layers = layers.data()};
 
-    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo));
-    return StatusOk();
+    CHECK_XRCMD(xrEndFrame(_session->getXrSession(), &frameEndInfo),
+                "Failed to xrEndFrame.");
   }
 
-  Status renderLayer(
+  bool renderLayer(
       XrTime predictedDisplayTime,
       std::vector<XrCompositionLayerProjectionView> &projectionLayerViews,
       XrCompositionLayerProjection &layer) {
@@ -260,11 +257,12 @@ public:
     lib::Buffer<XrView> views(_swapchains.size(), {.type = XR_TYPE_VIEW});
     CHECK_XRCMD(xrLocateViews(_session->getXrSession(), &viewLocateInfo,
                               &viewState, views.size(), &viewCountOutput,
-                              views.data()));
+                              views.data()),
+                "Failed to xrLocateViews.");
     if ((viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) == 0 ||
         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) == 0) {
-      return Error(EngineError::NOT_FOUND); // There is no valid tracking poses
-                                            // for the views.
+      return false; // There is no valid tracking poses
+                    // for the views.
     }
 
     // Render view to the appropriate part of the swapchain image.
@@ -276,14 +274,16 @@ public:
 
       uint32_t swapchainImageIndex;
       CHECK_XRCMD(xrAcquireSwapchainImage(viewSwapchain.getSwapchain(),
-                                          &acquireInfo, &swapchainImageIndex));
+                                          &acquireInfo, &swapchainImageIndex),
+                  "Failed to xrAcquireSwapchainImage.");
 
       const XrSwapchainImageWaitInfo imageWaitInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO,
           .timeout = XR_INFINITE_DURATION};
 
       CHECK_XRCMD(
-          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo));
+          xrWaitSwapchainImage(viewSwapchain.getSwapchain(), &imageWaitInfo),
+          "Failed to xrWaitSwapchainImage.");
 
       const XrCompositionLayerProjectionView &projectionLayerView =
           projectionLayerViews.emplace_back(XrCompositionLayerProjectionView{
@@ -294,19 +294,19 @@ public:
               .subImage.imageRect.offset = {0, 0},
               .subImage.imageRect.extent = viewSwapchain.getXrExtent2Di()});
 
-      RETURN_IF_ERROR(
-          _graphicsPlugin->draw(projectionLayerView, swapchainImageIndex));
+      _graphicsPlugin->draw(projectionLayerView, swapchainImageIndex);
 
       const XrSwapchainImageReleaseInfo releaseInfo = {
           .type = XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};
       CHECK_XRCMD(
-          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo));
+          xrReleaseSwapchainImage(viewSwapchain.getSwapchain(), &releaseInfo),
+          "Failed to xrReleaseSwapchainImage.");
     }
 
     layer.space = _space->getXrSpace();
     layer.viewCount = static_cast<uint32_t>(projectionLayerViews.size());
     layer.views = projectionLayerViews.data();
-    return StatusOk();
+    return true;
   }
 
   struct InputState {
@@ -357,8 +357,8 @@ void android_main(struct android_app *app) {
     data->application_activity = app->activity->clazz;
 
     VrApp application;
-    auto stat = application.init(app->activity->vm, app->activity->clazz,
-                                 app->activity->assetManager);
+    application.init(app->activity->vm, app->activity->clazz,
+                     app->activity->assetManager);
 
     while (app->destroyRequested == 0) {
       for (;;) {
