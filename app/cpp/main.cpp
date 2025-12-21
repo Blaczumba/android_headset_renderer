@@ -69,17 +69,16 @@ class VrApp {
 public:
   VrApp() = default;
 
-  Status init(void *applicationVm, void *applicationActivity,
-              AAssetManager *assetManager) {
+  void init(void *applicationVm, void *applicationActivity,
+            AAssetManager *assetManager) {
     xrw::AndroidData data = {applicationVm, applicationActivity};
     _platform = std::make_unique<xrw::AndroidPlatform>(data);
     _graphicsPlugin = std::make_unique<xrw::VulkanApplication>(
         debugCallback, assetManager,
         std::make_unique<AndroidFileLoader>(assetManager));
 
-    ASSIGN_OR_RETURN(
-        _instance,
-        xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin));
+    _instance =
+        xrw::Instance::create("BejzakEngine", *_platform, *_graphicsPlugin);
     _system = xrw::System::create(*_instance);
     _graphicsPlugin->initialize(_instance->getXrInstance(),
                                 _system->getXrSystemId());
@@ -91,7 +90,6 @@ public:
     _graphicsPlugin->createResources();
     _space = xrw::Space::create(_session->getXrSession(),
                                 XR_REFERENCE_SPACE_TYPE_LOCAL);
-    return StatusOk();
   }
 
   void pollEvents() {
@@ -359,8 +357,8 @@ void android_main(struct android_app *app) {
     data->application_activity = app->activity->clazz;
 
     VrApp application;
-    auto stat = application.init(app->activity->vm, app->activity->clazz,
-                                 app->activity->assetManager);
+    application.init(app->activity->vm, app->activity->clazz,
+                     app->activity->assetManager);
 
     while (app->destroyRequested == 0) {
       for (;;) {
