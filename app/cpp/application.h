@@ -123,10 +123,12 @@ class VulkanApplication : public GraphicsPluginVulkan {
 public:
   VulkanApplication(PFN_vkDebugUtilsMessengerCallbackEXT debugCallback,
                     AAssetManager *assetManager,
-                    const std::shared_ptr<FileLoader> &fileLoader)
+                    std::unique_ptr<FileLoader> &&fileLoader)
       : GraphicsPluginVulkan(debugCallback),
-        _assetManager(_logicalDevice, fileLoader, std::launch::deferred),
-        _pipelineManager(fileLoader), _fileLoader(fileLoader) {
+        _pipelineManager(PipelineManager::create(*fileLoader)),
+        _fileLoader(std::move(fileLoader)) {
+    _assetManager = AssetManager::create(_logicalDevice, *_fileLoader,
+                                         std::launch::deferred);
     setAssetmanager(assetManager);
   }
 
@@ -146,9 +148,9 @@ public:
   }
 
 private:
-  AssetManager _assetManager;
-  PipelineManager _pipelineManager;
-  std::shared_ptr<FileLoader> _fileLoader;
+  std::unique_ptr<AssetManager> _assetManager;
+  std::unique_ptr<PipelineManager> _pipelineManager;
+  std::unique_ptr<FileLoader> _fileLoader;
 
   Buffer _vertexBufferCube;
   Buffer _indexBufferCube;
@@ -167,12 +169,12 @@ private:
   Registry _registry;
   std::vector<Framebuffer> _framebuffers;
   std::vector<Texture> _attachments;
-  Pipeline _graphicsPipeline; // Does not have to be unique_ptr
+  Pipeline *_graphicsPipeline; // Does not have to be unique_ptr
 
   // shadow map
   Renderpass _shadowRenderPass;
   Framebuffer _shadowFramebuffer;
-  Pipeline _shadowPipeline; // Does not have to be unique_ptr
+  Pipeline *_shadowPipeline; // Does not have to be unique_ptr
   Texture _shadowMap;
   TextureHandle _shadowHandle;
 
@@ -189,14 +191,14 @@ private:
 
   Renderpass _renderpass;
 
-  Pipeline _skyboxPipeline;
+  Pipeline *_skyboxPipeline;
 
   uint8_t _currentFrame = 0;
 
   void loadCubemap() {
-    _assetManager.loadImageAsync(TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
+    _assetManager->loadImageAsync(TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
     std::string data = _fileLoader->loadFileToString(MODELS_PATH "cube.obj");
-    VertexData vertexDataCube = loadObj(_assetManager, "cube.obj", data);
+    VertexData vertexDataCube = loadObj(*_assetManager, "cube.obj", data);
 
     {
       SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
@@ -204,7 +206,7 @@ private:
 
       // Load texture.
       const AssetManager::ImageData &imageData =
-          _assetManager.getImageData(TEXTURES_PATH "cubemap_yokohama_rgba.ktx");
+          _assetManager->getImageData(vertexDataCube.diffuseTexture.ID);
 
       _textureCubemap = createCubemap(
           _logicalDevice, commandBuffer, imageData, VK_FORMAT_R8G8B8A8_UNORM,
@@ -212,7 +214,7 @@ private:
 
       // Load geometry.
       const AssetManager::VertexData &vData =
-          _assetManager.getVertexData("cube.obj");
+          _assetManager->getVertexData(vertexDataCube.vertexResourceID);
       _vertexBufferCube = Buffer::createVertexBuffer(
           _logicalDevice, vData.buffers.at("P").getSize());
       _vertexBufferCube.copyBuffer(commandBuffer, vData.buffers.at("P"));
@@ -226,7 +228,7 @@ private:
   void loadObjects() {
     // TODO needs refactoring
     const std::vector<VertexData> sceneData =
-        LoadGltfFromFile(_assetManager, MODELS_PATH "sponza/scene.gltf");
+        LoadGltfFromFile(*_assetManager, MODELS_PATH "sponza/scene.gltf");
     const float maxSamplerAnisotropy =
         _physicalDevice->getMaxSamplerAnisotropy();
     _objects.reserve(sceneData.size());
@@ -235,10 +237,10 @@ private:
     const VkCommandBuffer commandBuffer = handle.getCommandBuffer();
     for (const VertexData &sceneObject : sceneData) {
       const std::string diffusePath =
-          MODELS_PATH "sponza/" + sceneObject.diffuseTexture;
+          MODELS_PATH "sponza/" + sceneObject.diffuseTexture.path;
       if (!_textures.contains(diffusePath)) {
         const AssetManager::ImageData &imgData =
-            _assetManager.getImageData(diffusePath);
+            _assetManager->getImageData(sceneObject.diffuseTexture.ID);
         Texture texture =
             createTexture2D(_logicalDevice, commandBuffer, imgData,
                             VK_FORMAT_R8G8B8A8_SRGB, maxSamplerAnisotropy);
@@ -247,10 +249,10 @@ private:
                                          std::move(texture)));
       }
       const std::string normalPath =
-          MODELS_PATH "sponza/" + sceneObject.normalTexture;
+          MODELS_PATH "sponza/" + sceneObject.normalTexture.path;
       if (!_textures.contains(normalPath)) {
         const AssetManager::ImageData &imgData =
-            _assetManager.getImageData(normalPath);
+            _assetManager->getImageData(sceneObject.normalTexture.ID);
         Texture texture =
             createTexture2D(_logicalDevice, commandBuffer, imgData,
                             VK_FORMAT_R8G8B8A8_UNORM, maxSamplerAnisotropy);
@@ -259,10 +261,10 @@ private:
                                          std::move(texture)));
       }
       const std::string metallicRoughnessPath =
-          MODELS_PATH "sponza/" + sceneObject.metallicRoughnessTexture;
+          MODELS_PATH "sponza/" + sceneObject.metallicRoughnessTexture.path;
       if (!_textures.contains(metallicRoughnessPath)) {
-        const AssetManager::ImageData &imgData =
-            _assetManager.getImageData(metallicRoughnessPath);
+        const AssetManager::ImageData &imgData = _assetManager->getImageData(
+            sceneObject.metallicRoughnessTexture.ID);
         Texture texture =
             createTexture2D(_logicalDevice, commandBuffer, imgData,
                             VK_FORMAT_R8G8B8A8_UNORM, maxSamplerAnisotropy);
@@ -277,7 +279,7 @@ private:
                                _textures[normalPath].first,
                                _textures[metallicRoughnessPath].first});
       const AssetManager::VertexData &vData =
-          _assetManager.getVertexData(sceneObject.vertexResource);
+          _assetManager->getVertexData(sceneObject.vertexResourceID);
       MeshComponent msh;
       msh.vertexBuffer = Buffer::createVertexBuffer(
           _logicalDevice, vData.buffers.at("PTNT").getSize());
@@ -321,7 +323,7 @@ private:
         _logicalDevice, 150, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
 
     const VkDescriptorSetLayout bindlesslayout =
-        _pipelineManager.getOrCreateBindlessLayout(_logicalDevice);
+        _pipelineManager->getOrCreateBindlessLayout(_logicalDevice);
     _bindlessDescriptorSet =
         _descriptorPool->createDesriptorSet(bindlesslayout);
     _bindlessWriter =
@@ -346,7 +348,7 @@ private:
                                                    size);
     _dynamicDescriptorPool = DescriptorPool::create(_logicalDevice, 1);
     const VkDescriptorSetLayout cameraLayout =
-        _pipelineManager.getOrCreateCameraLayout(_logicalDevice);
+        _pipelineManager->getOrCreateCameraLayout(_logicalDevice);
     _dynamicDescriptorSet =
         _dynamicDescriptorPool->createDesriptorSet(cameraLayout);
     _dynamicDescriptorSetWriter.writeDescriptorSet(
@@ -411,10 +413,10 @@ private:
       }
     }
 
-    _graphicsPipeline = _pipelineManager.createPBRProgram(_renderpass)
-                            .createPipeline();
-    _skyboxPipeline = _pipelineManager.createSkyboxProgram(_renderpass)
-                          .createPipeline();
+    _graphicsPipeline = _pipelineManager->getPipeline(
+        _pipelineManager->createPBRProgram(_renderpass));
+    _skyboxPipeline = _pipelineManager->getPipeline(
+        _pipelineManager->createSkyboxProgram(_renderpass));
   }
 
   void createShadowResources() {
@@ -428,8 +430,9 @@ private:
     _shadowFramebuffer = Framebuffer::createFromTextures(
         _shadowRenderPass, std::span(&_shadowMap, 1));
 
-    _shadowPipeline = _pipelineManager.createShadowProgram(_shadowRenderPass)
-                          .createPipeline();
+    _shadowPipeline = _pipelineManager->getPipeline(
+        _pipelineManager->createShadowProgram(_shadowRenderPass));
+    ;
   }
 
   void createCommandBuffers() {
@@ -536,15 +539,15 @@ private:
       }
 
       vkCmdBindPipeline(commandBuffer,
-                        _graphicsPipeline.getVkPipelineBindPoint(),
-                        _graphicsPipeline.getVkPipeline());
+                        _graphicsPipeline->getVkPipelineBindPoint(),
+                        _graphicsPipeline->getVkPipeline());
 
       static const VkDescriptorSet descriptorSet =
           _bindlessDescriptorSet.getVkDescriptorSet();
 
       vkCmdBindPipeline(commandBuffer,
-                        _graphicsPipeline.getVkPipelineBindPoint(),
-                        _graphicsPipeline.getVkPipeline());
+                        _graphicsPipeline->getVkPipelineBindPoint(),
+                        _graphicsPipeline->getVkPipeline());
 
       const OctreeNode *root = _octree->getRoot();
       const auto &planes = extractFrustumPlanes(projectionMatrix * viewMatrix);
@@ -559,8 +562,8 @@ private:
           &offset, {_currentFrame});
 
       vkCmdBindDescriptorSets(commandBuffer,
-                              _graphicsPipeline.getVkPipelineBindPoint(),
-                              _graphicsPipeline.getVkPipelineLayout(), 0,
+                              _graphicsPipeline->getVkPipelineBindPoint(),
+                              _graphicsPipeline->getVkPipelineLayout(), 0,
                               static_cast<uint32_t>(std::size(descriptorSets)),
                               descriptorSets, 1, &offset);
 
@@ -583,8 +586,9 @@ private:
         vkCmdSetScissor(commandBuffer, 0, 1, &framebuffer.getScissor());
       }
 
-      vkCmdBindPipeline(commandBuffer, _skyboxPipeline.getVkPipelineBindPoint(),
-                        _skyboxPipeline.getVkPipeline());
+      vkCmdBindPipeline(commandBuffer,
+                        _skyboxPipeline->getVkPipelineBindPoint(),
+                        _skyboxPipeline->getVkPipeline());
 
       static constexpr VkDeviceSize offsets[] = {0};
 
@@ -598,7 +602,7 @@ private:
                                       .view = viewMatrix,
                                       .skyboxHandle =
                                           static_cast<uint32_t>(_skyboxHandle)};
-      vkCmdPushConstants(commandBuffer, _skyboxPipeline.getVkPipelineLayout(),
+      vkCmdPushConstants(commandBuffer, _skyboxPipeline->getVkPipelineLayout(),
                          VK_SHADER_STAGE_VERTEX_BIT |
                              VK_SHADER_STAGE_FRAGMENT_BIT,
                          0, sizeof(pc), &pc);
@@ -607,8 +611,8 @@ private:
           _bindlessDescriptorSet.getVkDescriptorSet();
 
       vkCmdBindDescriptorSets(commandBuffer,
-                              _skyboxPipeline.getVkPipelineBindPoint(),
-                              _skyboxPipeline.getVkPipelineLayout(), 0, 1,
+                              _skyboxPipeline->getVkPipelineBindPoint(),
+                              _skyboxPipeline->getVkPipelineLayout(), 0, 1,
                               &descriptorSet, 0, nullptr);
 
       vkCmdDrawIndexed(commandBuffer,
@@ -664,8 +668,8 @@ private:
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     const VkDeviceSize offsets[] = {0};
-    vkCmdBindPipeline(commandBuffer, _shadowPipeline.getVkPipelineBindPoint(),
-                      _shadowPipeline.getVkPipeline());
+    vkCmdBindPipeline(commandBuffer, _shadowPipeline->getVkPipelineBindPoint(),
+                      _shadowPipeline->getVkPipeline());
 
     PushConstantsShadow pc = {.lightProjView = _ubLight.projView};
 
@@ -677,7 +681,7 @@ private:
 
       pc.model = transformComponent.model;
 
-      vkCmdPushConstants(commandBuffer, _shadowPipeline.getVkPipelineLayout(),
+      vkCmdPushConstants(commandBuffer, _shadowPipeline->getVkPipelineLayout(),
                          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
 
       VkBuffer vertexBuffer = meshComponent.vertexBufferPrimitive.getVkBuffer();
@@ -718,17 +722,17 @@ private:
         const auto &transformComponent =
             _registry.getComponent<TransformComponent>(object->getEntity());
 
-        const PushConstantsPBR pc = {
+        const PushConstantsModelDescriptorHandles pc = {
             .model = transformComponent.model,
-            .uniformIndex = (uint32_t)_lightHandle,
-            .diffuse = (uint32_t)materialComponent.diffuse,
-            .normal = (uint32_t)materialComponent.normal,
-            .metallicRoughness = (uint32_t)materialComponent.metallicRoughness,
-            .shadow = (uint32_t)_shadowHandle,
-        };
+            .descriptorHandles = {
+                static_cast<uint32_t>(_lightHandle),
+                static_cast<uint32_t>(materialComponent.diffuse),
+                static_cast<uint32_t>(materialComponent.normal),
+                static_cast<uint32_t>(materialComponent.metallicRoughness),
+                static_cast<uint32_t>(_shadowHandle)}};
 
         vkCmdPushConstants(
-            commandBuffer, _graphicsPipeline.getVkPipelineLayout(),
+            commandBuffer, _graphicsPipeline->getVkPipelineLayout(),
             VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
             sizeof(pc), &pc);
 
