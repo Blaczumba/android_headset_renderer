@@ -343,7 +343,8 @@ void android_main(struct android_app *app) {
         spdlog::android_logger_mt("android", "spdlog-android");
     android_logger->set_level(spdlog::level::info);
     spdlog::set_default_logger(android_logger);
-
+    spdlog::debug("Ignoring event type");
+    return;
     JNIEnv *env;
     app->activity->vm->AttachCurrentThread(&env, nullptr);
 
