@@ -23,31 +23,11 @@
 #include "vulkan/wrapper/descriptor_set/descriptor_pool.h"
 #include "vulkan/wrapper/descriptor_set/descriptor_set_writer.h"
 #include "vulkan/wrapper/memory_objects/texture.h"
-#include "vulkan/wrapper/pipeline/input_description.h"
 #include "vulkan/wrapper/pipeline/pipeline.h"
 #include "vulkan/wrapper/render_pass/render_pass.h"
 #include "vulkan/wrapper/util/check.h"
 
 namespace {
-
-lib::Buffer<VkBufferImageCopy>
-createBufferImageCopyRegions(std::span<const ImageSubresource> subresources) {
-  lib::Buffer<VkBufferImageCopy> regions(subresources.size());
-  std::transform(
-      std::cbegin(subresources), std::cend(subresources), regions.begin(),
-      [](const ImageSubresource &subresource) {
-        return VkBufferImageCopy{
-            .bufferOffset = subresource.offset,
-            .imageSubresource = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                                 .mipLevel = subresource.mipLevel,
-                                 .baseArrayLayer = subresource.baseArrayLayer,
-                                 .layerCount = subresource.layerCount},
-            .imageExtent = {.width = subresource.width,
-                            .height = subresource.height,
-                            .depth = subresource.depth}};
-      });
-  return regions;
-}
 
 Texture createCubemap(const LogicalDevice &logicalDevice,
                       VkCommandBuffer commandBuffer,
@@ -68,7 +48,7 @@ Texture createCubemap(const LogicalDevice &logicalDevice,
           .withLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
           .buildImage(logicalDevice, commandBuffer,
                       imageData.stagingBuffer.getVkBuffer(),
-                      createBufferImageCopyRegions(imageData.copyRegions));
+                      imageData.copyRegions);
   texture.addCreateVkImageView(0, imageData.mipLevels, 0, 6);
   return texture;
 }
@@ -109,8 +89,7 @@ Texture createTexture2D(const LogicalDevice &logicalDevice,
                         .withMaxLod(static_cast<float>(imageData.mipLevels))
                         .buildMipmapImage(logicalDevice, commandBuffer,
                                           imageData.stagingBuffer.getVkBuffer(),
-                                          createBufferImageCopyRegions(
-                                              imageData.copyRegions));
+                                              imageData.copyRegions);
   texture.addCreateVkImageView(0, imageData.mipLevels, 0, 1);
   return texture;
 }
@@ -156,14 +135,14 @@ private:
   Buffer _indexBufferCube;
   VkIndexType _indexBufferCubeType;
   Texture _textureCubemap;
-  TextureHandle _skyboxHandle;
+  BindlessTextureHandle _skyboxHandle;
 
   DescriptorSetWriter _dynamicDescriptorSetWriter;
   Buffer _dynamicUniformBuffersCamera;
   DescriptorSet _dynamicDescriptorSet;
 
   // gltf objects
-  std::unordered_map<std::string, std::pair<TextureHandle, Texture>> _textures;
+  std::unordered_map<std::string, std::pair<BindlessTextureHandle, Texture>> _textures;
   std::vector<Object> _objects;
   std::unique_ptr<Octree> _octree;
   Registry _registry;
@@ -176,12 +155,12 @@ private:
   Framebuffer _shadowFramebuffer;
   Pipeline *_shadowPipeline; // Does not have to be unique_ptr
   Texture _shadowMap;
-  TextureHandle _shadowHandle;
+  BindlessTextureHandle _shadowHandle;
 
   UniformBufferLight _ubLight;
 
   Buffer _lightBuffer;
-  BufferHandle _lightHandle;
+  BindlessBufferHandle _lightHandle;
 
   std::shared_ptr<DescriptorPool> _descriptorPool;
   std::shared_ptr<DescriptorPool> _dynamicDescriptorPool;
@@ -227,7 +206,7 @@ private:
 
   void loadObjects() {
     // TODO needs refactoring
-    const std::vector<VertexData> sceneData =
+    const std::vector<VertexData<AssetManager>> sceneData =
         LoadGltfFromFile(*_assetManager, MODELS_PATH "sponza/scene.gltf");
     const float maxSamplerAnisotropy =
         _physicalDevice->getMaxSamplerAnisotropy();
@@ -235,7 +214,7 @@ private:
 
     SingleTimeCommandBuffer handle(*_singleTimeCommandPool);
     const VkCommandBuffer commandBuffer = handle.getCommandBuffer();
-    for (const VertexData &sceneObject : sceneData) {
+    for (const VertexData<AssetManager> &sceneObject : sceneData) {
       const std::string diffusePath =
           MODELS_PATH "sponza/" + sceneObject.diffuseTexture.path;
       if (!_textures.contains(diffusePath)) {
@@ -275,9 +254,9 @@ private:
       Entity e = _registry.createEntity();
       _objects.emplace_back("", e);
       _registry.addComponent<MaterialComponent>(
-          e, MaterialComponent{_textures[diffusePath].first,
-                               _textures[normalPath].first,
-                               _textures[metallicRoughnessPath].first});
+          e, MaterialComponent{*_textures[diffusePath].first,
+                               *_textures[normalPath].first,
+                               *_textures[metallicRoughnessPath].first});
       const AssetManager::VertexData &vData =
           _assetManager->getVertexData(sceneObject.vertexResourceID);
       MeshComponent msh;
@@ -320,14 +299,14 @@ private:
 
   void createDescriptorSets() {
     _descriptorPool = DescriptorPool::create(
-        _logicalDevice, 150, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
+        _logicalDevice, 1, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
 
     const VkDescriptorSetLayout bindlesslayout =
         _pipelineManager->getOrCreateBindlessLayout(_logicalDevice);
     _bindlessDescriptorSet =
         _descriptorPool->createDesriptorSet(bindlesslayout);
     _bindlessWriter =
-        std::make_unique<BindlessDescriptorSetWriter>(_bindlessDescriptorSet);
+        BindlessDescriptorSetWriter::create(_bindlessDescriptorSet);
     _skyboxHandle = _bindlessWriter->storeTexture(_textureCubemap);
 
     {
@@ -601,7 +580,7 @@ private:
       const PushConstantsSkybox pc = {.proj = projectionMatrix,
                                       .view = viewMatrix,
                                       .skyboxHandle =
-                                          static_cast<uint32_t>(_skyboxHandle)};
+                                          static_cast<uint16_t>(*_skyboxHandle)};
       vkCmdPushConstants(commandBuffer, _skyboxPipeline->getVkPipelineLayout(),
                          VK_SHADER_STAGE_VERTEX_BIT |
                              VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -722,14 +701,14 @@ private:
         const auto &transformComponent =
             _registry.getComponent<TransformComponent>(object->getEntity());
 
-        const PushConstantsModelDescriptorHandles pc = {
+        const PushConstantsModelDescriptorHandles32Bit pc = {
             .model = transformComponent.model,
             .descriptorHandles = {
-                static_cast<uint32_t>(_lightHandle),
+                static_cast<uint32_t>(*_lightHandle),
                 static_cast<uint32_t>(materialComponent.diffuse),
                 static_cast<uint32_t>(materialComponent.normal),
                 static_cast<uint32_t>(materialComponent.metallicRoughness),
-                static_cast<uint32_t>(_shadowHandle)}};
+                static_cast<uint32_t>(*_shadowHandle)}};
 
         vkCmdPushConstants(
             commandBuffer, _graphicsPipeline->getVkPipelineLayout(),
