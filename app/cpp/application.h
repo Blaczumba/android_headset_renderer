@@ -701,14 +701,14 @@ private:
         const auto &transformComponent =
             _registry.getComponent<TransformComponent>(object->getEntity());
 
-        const PushConstantsModelDescriptorHandles pc = {
+        const PushConstantsModelDescriptorHandles32Bit pc = {
             .model = transformComponent.model,
             .descriptorHandles = {
-                static_cast<uint16_t>(*_lightHandle),
-                static_cast<uint16_t>(materialComponent.diffuse),
-                static_cast<uint16_t>(materialComponent.normal),
-                static_cast<uint16_t>(materialComponent.metallicRoughness),
-                static_cast<uint16_t>(*_shadowHandle)}};
+                static_cast<uint32_t>(*_lightHandle),
+                static_cast<uint32_t>(materialComponent.diffuse),
+                static_cast<uint32_t>(materialComponent.normal),
+                static_cast<uint32_t>(materialComponent.metallicRoughness),
+                static_cast<uint32_t>(*_shadowHandle)}};
 
         vkCmdPushConstants(
             commandBuffer, _graphicsPipeline->getVkPipelineLayout(),

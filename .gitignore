@@ -49,6 +49,7 @@ output.json
 .idea/migrations.xml
 .idea/tasks.xml
 .idea/workspace.xml
+.idea
 # Android Studio 3 in .gitignore file.
 .idea/caches
 .idea/modules.xml
