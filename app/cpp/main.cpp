@@ -61,7 +61,7 @@ debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
               const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
               void *pUserData) {
   spdlog::warn("[Vulkan Validation] Severity: {}, Type: {}, Message: {}.",
-               messageSeverity, messageType, pCallbackData->pMessage);
+               (uint32_t)messageSeverity, (uint32_t)messageType, pCallbackData->pMessage);
   return VK_FALSE;
 }
 

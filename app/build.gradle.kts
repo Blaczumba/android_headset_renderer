@@ -4,7 +4,8 @@ plugins {
 android {
     compileSdk = 32
     // ndkVersion = "26.3.11579264"
-    ndkVersion = "29.0.13599879"
+    // ndkVersion = "29.0.13599879"
+    ndkVersion = "29.0.14206865"
     namespace = "app.bejzak.bejzak_engine"
     defaultConfig {
         minSdk = 32

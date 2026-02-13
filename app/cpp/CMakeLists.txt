@@ -16,9 +16,6 @@ add_custom_target(
 
 add_dependencies(${PROJECT_NAME} CompileShaders)
 
-add_compile_definitions(TEXTURES_PATH="textures/")
-add_compile_definitions(MODELS_PATH="models/")
-
 target_compile_definitions(${PROJECT_NAME} PRIVATE XR_USE_PLATFORM_ANDROID
         XR_USE_GRAPHICS_API_VULKAN
         VK_USE_PLATFORM_ANDROID_KHR)
