@@ -2,7 +2,7 @@ add_library(NativeAppGlue STATIC ${ANDROID_NDK}/sources/android/native_app_glue/
 target_include_directories(NativeAppGlue PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -u ANativeActivity_onCreate")
 
-add_library(${PROJECT_NAME} SHARED main.cpp application.h)
+add_library(${PROJECT_NAME} SHARED main.cpp)
 
 set(SHADER_COMPILE_SCRIPT
         "${PROJECT_SOURCE_DIR}/cpp/compile_shaders.sh")
