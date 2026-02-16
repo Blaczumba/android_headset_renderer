@@ -17,6 +17,10 @@ glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl
 glslc -fshader-stage=vertex      "$SHADERS_DIR/shadow.vert.glsl"                  -O -o "$ASSETS_DIR/shadow.vert.spv"
 glslc -fshader-stage=fragment    "$SHADERS_DIR/shadow.frag.glsl"                  -O -o "$ASSETS_DIR/shadow.frag.spv"
 
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/pbr_env_mapping.vert.glsl" -O -o "$ASSETS_DIR/pbr_env_mapping.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/env_mapping_phong.vert.glsl" -O -o "$ASSETS_DIR/env_mapping_phong.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/env_mapping_phong.frag.glsl" -O -o "$ASSETS_DIR/env_mapping_phong.frag.spv"
+
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/shader_pbr.vert.glsl" -O -o "$ASSETS_DIR/shader_pbr.vert.spv"
 
 glslc -fshader-stage=vertex      "$SHADERS_DIR/shader_pbr_tesselation.vert.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.vert.spv"
