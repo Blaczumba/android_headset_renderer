@@ -21,11 +21,16 @@ glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/env_mapping_phong.vert.glsl" -O -o "$ASSETS_DIR/env_mapping_phong.vert.spv"
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/env_mapping_phong.frag.glsl" -O -o "$ASSETS_DIR/env_mapping_phong.frag.spv"
 
-glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/shader_pbr.vert.glsl" -O -o "$ASSETS_DIR/shader_pbr.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/env_mapping_phong_multiview.vert.glsl" -O -o "$ASSETS_DIR/env_mapping_phong_multiview.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/env_mapping_phong_multiview.frag.glsl" -O -o "$ASSETS_DIR/env_mapping_phong_multiview.frag.spv"
 
-glslc -fshader-stage=vertex      "$SHADERS_DIR/shader_pbr_tesselation.vert.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/shader_pbr.vert.glsl" -O -o "$ASSETS_DIR/shader_pbr.vert.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex "$SHADERS_DIR/shader_pbr_multiview.vert.glsl" -O -o "$ASSETS_DIR/shader_pbr_multiview.vert.spv"
+
+glslc -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=vertex      "$SHADERS_DIR/shader_pbr_tesselation.vert.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.vert.spv"
 glslc -fshader-stage=tesscontrol "$SHADERS_DIR/shader_pbr_tesselation.tsc.glsl"   -O -o "$ASSETS_DIR/shader_pbr_tesselation.tsc.spv"
-glslc -fshader-stage=tesseval    "$SHADERS_DIR/shader_pbr_tesselation.tse.glsl"   -O -o "$ASSETS_DIR/shader_pbr_tesselation.tse.spv"
-glslc -fshader-stage=fragment    "$SHADERS_DIR/shader_pbr_tesselation.frag.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.frag.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=tesseval    "$SHADERS_DIR/shader_pbr_tesselation.tse.glsl"   -O -o "$ASSETS_DIR/shader_pbr_tesselation.tse.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=tesseval    "$SHADERS_DIR/shader_pbr_tesselation_multiview.tse.glsl"   -O -o "$ASSETS_DIR/shader_pbr_tesselation_multiview.tse.spv"
+glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment    "$SHADERS_DIR/shader_pbr_tesselation.frag.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.frag.spv"
 
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/shader_pbr.frag.glsl" -O -o "$ASSETS_DIR/shader_pbr.frag.spv"

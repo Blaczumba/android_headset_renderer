@@ -7,6 +7,7 @@
 
 #include "openxr_wrapper/presentation/presentation.h"
 #include "openxr_wrapper/platform/android_platform.h"
+#include "openxr_wrapper/graphics_plugin/graphics_plugin_vulkan.h"
 #include "common/file/android_file_loader.h"
 #include "common/model_loader/tiny_gltf_loader/tiny_gltf_loader.h"
 
