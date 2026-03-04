@@ -10,6 +10,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 
 add_subdirectory(meta_quest_openxr_loader)
 
+add_definitions(-DSPDLOG_USE_STD_FORMAT)
 FetchContent_Declare(spdlog
         GIT_REPOSITORY https://github.com/gabime/spdlog.git
         GIT_TAG v1.13.0
@@ -26,6 +27,9 @@ FetchContent_Declare(OpenXR-SDK
         GIT_PROGRESS TRUE
 )
 FetchContent_MakeAvailable(OpenXR-SDK)
+
+add_compile_definitions(TEXTURES_PATH="textures/")
+add_compile_definitions(MODELS_PATH="models/")
 
 add_subdirectory(bejzak_engine)
 add_subdirectory(cpp)
