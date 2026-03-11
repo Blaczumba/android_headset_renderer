@@ -34,3 +34,5 @@ glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment    "$SHADERS_DIR/shader_pbr_tesselation.frag.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.frag.spv"
 
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/shader_pbr.frag.glsl" -O -o "$ASSETS_DIR/shader_pbr.frag.spv"
+
+glslc -fshader-stage=compute "$SHADERS_DIR/fov_fragment_shading_rate.comp.glsl" -O -o "$ASSETS_DIR/fov_fragment_shading_rate.comp.spv"
