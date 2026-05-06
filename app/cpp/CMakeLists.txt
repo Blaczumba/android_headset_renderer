@@ -21,7 +21,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE XR_USE_PLATFORM_ANDROID
 target_link_libraries(${PROJECT_NAME}
         NativeAppGlue
         android
-        MetaQuestOpenxrLoader
         BejzakEngine
         spdlog
 )

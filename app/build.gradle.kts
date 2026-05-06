@@ -37,6 +37,9 @@ android {
             isJniDebuggable = true
         }
     }
+    buildFeatures {
+        prefab = true
+    }
     externalNativeBuild {
         cmake {
             version = "3.22.1"
@@ -63,4 +66,8 @@ android {
             keepDebugSymbols.add("**.so")
         }
     }
+}
+
+dependencies {
+    implementation("org.khronos.openxr:openxr_loader_for_android:1.0.33")
 }
