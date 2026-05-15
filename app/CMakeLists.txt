@@ -13,17 +13,37 @@ add_definitions(-DSPDLOG_USE_STD_FORMAT)
 add_compile_definitions(TEXTURES_PATH="textures/")
 add_compile_definitions(MODELS_PATH="models/")
 
-# add_library(OpenxrLoader SHARED IMPORTED GLOBAL)
-# if (${CMAKE_BUILD_TYPE} STREQUAL Debug)
-#     set_target_properties(OpenxrLoader PROPERTIES IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/libs/debug/arm64-v8a/libopenxr_loader.so")
-# elseif (${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo) #android always generates debug symbols and the gradle plugin does the stripping part
-#     set_target_properties(OpenxrLoader PROPERTIES IMPORTED_LOCATION "${PROJECT_SOURCE_DIR}/libs/release/arm64-v8a/libopenxr_loader.so")
-# else ()
-#     message(FATAL_ERROR "unknown build type")
-# endif ()
-
 add_library(NativeAppGlue STATIC ${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c)
 target_include_directories(NativeAppGlue PUBLIC ${ANDROID_NDK}/sources/android/native_app_glue)
 
+find_package(OpenXR REQUIRED CONFIG)
+
 add_subdirectory(bejzak_engine)
-add_subdirectory(cpp)
+
+set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -u ANativeActivity_onCreate")
+
+add_library(${PROJECT_NAME} SHARED main.cpp)
+
+set(SHADER_COMPILE_SCRIPT
+        "${PROJECT_SOURCE_DIR}/compile_shaders.sh")
+
+file(CHMOD ${SHADER_COMPILE_SCRIPT} PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ)
+
+add_custom_target(
+        CompileShaders
+        COMMAND ${SHADER_COMPILE_SCRIPT}
+        COMMENT "Compiling shaders...")
+
+add_dependencies(${PROJECT_NAME} CompileShaders)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE XR_USE_PLATFORM_ANDROID
+        XR_USE_GRAPHICS_API_VULKAN
+        VK_USE_PLATFORM_ANDROID_KHR)
+
+target_link_libraries(${PROJECT_NAME}
+        NativeAppGlue
+        android
+        BejzakEngine
+        spdlog
+        OpenXR::openxr_loader
+)

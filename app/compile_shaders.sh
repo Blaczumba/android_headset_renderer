@@ -2,8 +2,8 @@
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SHADERS_DIR="$SCRIPT_DIR/../bejzak_engine/shaders"
-ASSETS_DIR="$SCRIPT_DIR/../assets/shaders"
+SHADERS_DIR="$SCRIPT_DIR/bejzak_engine/shaders"
+ASSETS_DIR="$SCRIPT_DIR/assets/shaders"
 
 # Compile shaders with glslc
 glslc -fshader-stage=vertex      "$SHADERS_DIR/shader_blinn_phong.vert.glsl"      -O -o "$ASSETS_DIR/shader_blinn_phong.vert.spv"
