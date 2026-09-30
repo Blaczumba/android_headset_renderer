@@ -2,8 +2,8 @@
 
 # Get the directory of the script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SHADERS_DIR="$SCRIPT_DIR/../bejzak_engine/shaders"
-ASSETS_DIR="$SCRIPT_DIR/../assets/shaders"
+SHADERS_DIR="$SCRIPT_DIR/bejzak_engine/shaders"
+ASSETS_DIR="$SCRIPT_DIR/assets/shaders"
 
 # Compile shaders with glslc
 glslc -fshader-stage=vertex      "$SHADERS_DIR/shader_blinn_phong.vert.glsl"      -O -o "$ASSETS_DIR/shader_blinn_phong.vert.spv"
@@ -34,3 +34,5 @@ glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment    "$SHADERS_DIR/shader_pbr_tesselation.frag.glsl"  -O -o "$ASSETS_DIR/shader_pbr_tesselation.frag.spv"
 
 glslc -I "$SHADERS_DIR/bindless.glsl" -I "$SHADERS_DIR/32bit_push_constants.glsl" -fshader-stage=fragment "$SHADERS_DIR/shader_pbr.frag.glsl" -O -o "$ASSETS_DIR/shader_pbr.frag.spv"
+
+glslc -fshader-stage=compute "$SHADERS_DIR/fov_fragment_shading_rate.comp.glsl" -O -o "$ASSETS_DIR/fov_fragment_shading_rate.comp.spv"
